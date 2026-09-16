@@ -105,7 +105,46 @@ const categories=[
 ["Innovation in Teaching & Learning Award",["Innovation|30","Teaching & Learning Impact|25","Creativity|15","Digital/Technology Integration|15","Scalability & Sustainability|10","Evidence|5"]],
 ["Work-Integrated Learning Excellence Award",["WIL Coordination & Quality|25","Industry Partnerships|20","Student Placement & Support|20","Workplace Learning Outcomes|20","Innovation|10","Evidence|5"]]
 ];
-const colleges=["Majuba","Motheo","Ikhala","EEC","EWC","Orbit","Sedibeng","Coastal","Mnambithi","Taletso","KSD","King Hintsa","Elangeni","Nkangala","Vhembe","BCC","Westcol","West Coast","Letaba","SWGC","Gert Sibande","NCU","NCR","Mopani","Boland","Goldfields","Flavius Mareka","CJC","Waterberg","Maluti","Vuselela","Umfolozi","Thekwini","TNC","South Cape"];
+const colleges=[
+"Buffalo City TVET College",
+"Boland TVET College",
+"Central Johannesburg TVET College",
+"Coastal TVET College",
+"Eastern Cape Midlands TVET College",
+"Ekurhuleni East TVET College",
+"Ekurhuleni West TVET College",
+"Elangeni TVET College",
+"Flavius Mareka TVET College",
+"Gert Sibande TVET College",
+"Goldfields TVET College",
+"Ikhala TVET College",
+"King Hintsa TVET College",
+"Lephalale TVET College",
+"Letaba TVET College",
+"Majuba TVET College",
+"Maluti TVET College",
+"Mnambithi TVET College",
+"Mopani South East TVET College",
+"Motheo TVET College",
+"Nkangala TVET College",
+"Northern Cape Rural TVET College",
+"Northern Cape Urban TVET College",
+"Orbit TVET College",
+"Sedibeng TVET College",
+"South Cape TVET College",
+"South West Gauteng TVET College",
+"Taletso TVET College",
+"Thekwini TVET College",
+"Tshwane North TVET College",
+"Tshwane South TVET College",
+"Umgungundlovu TVET College",
+"Umfolozi TVET College",
+"Vhembe TVET College",
+"Vuselela TVET College",
+"Waterberg TVET College",
+"West Coast TVET College",
+"Western TVET College"
+];
 let data=JSON.parse(localStorage.getItem("tvetAwardsData")||'{"nominees":[],"scores":[],"settings":{"max":100,"judges":3}}');
 function save(){localStorage.setItem("tvetAwardsData",JSON.stringify(data));updateAll()}
 function showPage(id){document.querySelectorAll(".page").forEach(p=>p.classList.remove("active"));document.getElementById(id).classList.add("active");document.querySelectorAll(".nav").forEach(b=>b.classList.toggle("active",b.dataset.page===id));updateAll()}
