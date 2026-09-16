@@ -3,12 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SA TVET Colleges Awards — Scoring App</title>
+<title>NATIONAL TVET EXCELLENCE AWARDS 2026 — Scoring App</title>
 <style>
 :root{--navy:#0b1f3a;--blue:#145da0;--gold:#d4af37;--light:#f4f7fb;--dark:#172033;--muted:#68758a;--white:#fff;--green:#198754;--red:#c0392b;--shadow:0 8px 24px rgba(11,31,58,.10)}
 *{box-sizing:border-box}body{margin:0;font-family:Arial,Helvetica,sans-serif;background:var(--light);color:var(--dark)}
 header{background:linear-gradient(135deg,var(--navy),#123e6b);color:white;padding:22px 5%;display:flex;align-items:center;justify-content:space-between;gap:20px;position:sticky;top:0;z-index:10}
-.brand{display:flex;align-items:center;gap:14px}.logo{width:52px;height:52px;border:2px solid var(--gold);border-radius:50%;display:grid;place-items:center;color:var(--gold);font-weight:bold}.brand h1{font-size:20px;margin:0}.brand p{margin:4px 0 0;color:#dce8f5;font-size:12px}
+.brand{display:flex;align-items:center;gap:14px}.dhet-logo{height:64px;width:auto;max-width:220px;object-fit:contain;background:#fff;border-radius:5px;padding:4px}@media(max-width:560px){.dhet-logo{height:52px;max-width:190px}}.logo{width:52px;height:52px;border:2px solid var(--gold);border-radius:50%;display:grid;place-items:center;color:var(--gold);font-weight:bold}.brand h1{font-size:20px;margin:0}.brand p{margin:4px 0 0;color:#dce8f5;font-size:12px}
 nav{display:flex;gap:8px;flex-wrap:wrap}nav button{background:transparent;color:white;border:1px solid #ffffff55;padding:9px 13px;border-radius:7px;cursor:pointer}nav button.active,nav button:hover{background:var(--gold);color:var(--navy)}
 main{max-width:1400px;margin:auto;padding:28px 5%}.page{display:none}.page.active{display:block}.hero{background:white;border-radius:18px;padding:30px;box-shadow:var(--shadow);margin-bottom:22px}.hero h2{margin:0 0 8px;color:var(--navy);font-size:30px}.hero p{color:var(--muted)}
 .cards{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}.card{background:white;border-radius:14px;padding:20px;box-shadow:var(--shadow)}.card .num{font-size:28px;font-weight:bold;color:var(--blue)}.card small{color:var(--muted)}
@@ -27,7 +27,10 @@ table{width:100%;border-collapse:collapse}th,td{padding:11px;border-bottom:1px s
 </head>
 <body>
 <header>
-  <div class="brand"><div class="logo">TVET</div><div><h1>South African TVET Colleges Awards</h1><p>Lecturer Excellence & Creativity Awards — Scoring System</p></div></div>
+  <div class="brand">
+<img class="dhet-logo" src="data:image/webp;base64,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" alt="Department of Higher Education and Training logo">
+<div><h1>NATIONAL TVET EXCELLENCE AWARDS 2026</h1><p>Awards Scoring & Adjudication System</p></div>
+</div>
   <nav>
     <button class="nav active" data-page="dashboard">Dashboard</button>
     <button class="nav" data-page="nominees">Nominees</button>
@@ -39,11 +42,11 @@ table{width:100%;border-collapse:collapse}th,td{padding:11px;border-bottom:1px s
 
 <main>
 <section id="dashboard" class="page active">
-  <div class="hero"><h2>Awards Scoring Dashboard</h2><p>Manage nominees, score entries using weighted criteria, and generate transparent category results.</p>
+  <div class="hero"><h2>NATIONAL TVET EXCELLENCE AWARDS 2026</h2><p>Manage nominees, score entries using weighted criteria, and generate transparent category results.</p>
   <div class="actions"><button class="btn gold" onclick="showPage('nominees')">+ Add Nominee</button><button class="btn" onclick="showPage('scoring')">Start Scoring</button><button class="btn gray" onclick="exportCSV()">Export Results</button></div></div>
   <div class="cards">
     <div class="card"><div class="num" id="statNominees">0</div><small>Nominees</small></div>
-    <div class="card"><div class="num" id="statCategories">8</div><small>Award Categories</small></div>
+    <div class="card"><div class="num" id="statCategories">7</div><small>Award Categories</small></div>
     <div class="card"><div class="num" id="statScores">0</div><small>Completed Scores</small></div>
     <div class="card"><div class="num" id="statAverage">0%</div><small>Average Score</small></div>
   </div>
@@ -51,7 +54,7 @@ table{width:100%;border-collapse:collapse}th,td{padding:11px;border-bottom:1px s
 </section>
 
 <section id="nominees" class="page">
-  <div class="hero"><h2>Nominee Management</h2><p>Add and manage lecturers or teams entering the awards.</p></div>
+  <div class="hero"><h2>NATIONAL TVET EXCELLENCE AWARDS 2026 — Nominee Management</h2><p>Add and manage lecturers or teams entering the awards.</p></div>
   <div class="grid">
     <div class="panel"><h3>Add Nominee</h3>
       <label>Nominee / Lecturer Name</label><input id="nName" placeholder="e.g. Dr. Jane Doe">
@@ -65,7 +68,7 @@ table{width:100%;border-collapse:collapse}th,td{padding:11px;border-bottom:1px s
 </section>
 
 <section id="scoring" class="page">
-  <div class="hero"><h2>Judge Scoring</h2><p>Scores are entered from 0–100 for each criterion. The app automatically applies the configured weights.</p></div>
+  <div class="hero"><h2>NATIONAL TVET EXCELLENCE AWARDS 2026 — Judge Scoring</h2><p>Scores are entered from 0–100 for each criterion. The app automatically applies the configured weights.</p></div>
   <div class="panel">
     <label>Judge Name</label><input id="judgeName" placeholder="Enter judge name">
     <label>Select Nominee</label><select id="scoreNominee" onchange="loadScoreForm()"></select>
@@ -74,7 +77,7 @@ table{width:100%;border-collapse:collapse}th,td{padding:11px;border-bottom:1px s
 </section>
 
 <section id="results" class="page">
-  <div class="hero"><h2>Results & Leaderboard</h2><p>Results are calculated from completed judging records. This prototype stores data locally in your browser.</p>
+  <div class="hero"><h2>NATIONAL TVET EXCELLENCE AWARDS 2026 — Results & Leaderboard</h2><p>Results are calculated from completed judging records. This prototype stores data locally in your browser.</p>
   <div class="actions"><button class="btn gray" onclick="exportCSV()">Download CSV</button><button class="btn red" onclick="clearScores()">Clear Scores</button></div></div>
   <div class="panel"><div id="resultsTable"></div></div>
 </section>
@@ -94,14 +97,13 @@ table{width:100%;border-collapse:collapse}th,td{padding:11px;border-bottom:1px s
 
 <script>
 const categories=[
-["Lecturer Excellence Award",["Teaching & Learning Excellence|25","Professional Development|15","Student Achievement & Support|20","Evidence of Impact|20","Professional Practice|20"]],
-["Innovation & Creativity Award",["Innovation|30","Creativity|20","Implementation|20","Impact|20","Evidence|10"]],
-["Digital/AI Teaching Excellence Award",["Digital Integration|25","AI/Technology Application|25","Teaching Effectiveness|20","Innovation|15","Impact|15"]],
-["Student Support Excellence Award",["Student Support|30","Accessibility & Inclusion|20","Student Engagement|20","Outcomes|20","Evidence|10"]],
-["Community Engagement Award",["Community Impact|30","Partnerships|20","Sustainability|20","Student Involvement|15","Evidence|15"]],
-["Outstanding Lecturer of the Year",["Teaching Excellence|25","Innovation|20","Student Impact|20","Leadership|15","Professional Contribution|10","Community/Industry Engagement|10"]],
-["Team Excellence Award",["Collaboration|25","Team Performance|25","Innovation|20","Results|20","Evidence|10"]],
-["Emerging Educator Award",["Teaching Practice|25","Growth & Development|20","Innovation|20","Student Support|20","Potential & Impact|15"]]
+["National TVET Lecturer of the Year",["Teaching & Learning Excellence|25","Student Success & Support|20","Professional Development|15","Leadership & Contribution|15","Innovation & Impact|15","Evidence of Excellence|10"]],
+["Engineering Lecturer Excellence Award",["Engineering Teaching Excellence|25","Practical Skills Development|20","Industry Relevance|20","Student Achievement|15","Innovation|10","Evidence|10"]],
+["Business & Utility Studies Lecturer Excellence Award",["Teaching Excellence|25","Industry & Workplace Relevance|20","Student Achievement|20","Innovation in Delivery|15","Professional Development|10","Evidence|10"]],
+["Occupational Programmes Lecturer Excellence Award",["Occupational Teaching Excellence|25","Practical/Workplace Training|25","Industry Alignment|20","Student Competence & Outcomes|15","Innovation|10","Evidence|5"]],
+["Emerging TVET Lecturer Award",["Teaching Potential|25","Professional Growth|20","Innovation|20","Student Support|15","Contribution to TVET|10","Evidence|10"]],
+["Innovation in Teaching & Learning Award",["Innovation|30","Teaching & Learning Impact|25","Creativity|15","Digital/Technology Integration|15","Scalability & Sustainability|10","Evidence|5"]],
+["Work-Integrated Learning Excellence Award",["WIL Coordination & Quality|25","Industry Partnerships|20","Student Placement & Support|20","Workplace Learning Outcomes|20","Innovation|10","Evidence|5"]]
 ];
 let data=JSON.parse(localStorage.getItem("tvetAwardsData")||'{"nominees":[],"scores":[],"settings":{"max":100,"judges":3}}');
 function save(){localStorage.setItem("tvetAwardsData",JSON.stringify(data));updateAll()}
