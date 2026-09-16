@@ -58,7 +58,7 @@ table{width:100%;border-collapse:collapse}th,td{padding:11px;border-bottom:1px s
   <div class="grid">
     <div class="panel"><h3>Add Nominee</h3>
       <label>Nominee / Lecturer Name</label><input id="nName" placeholder="e.g. Dr. Jane Doe">
-      <label>College / Institution</label><input id="nCollege" placeholder="e.g. Tshwane North TVET College">
+      <label>College / Institution</label><select id="nCollege"></select>
       <label>Award Category</label><select id="nCategory"></select>
       <label>Nomination ID</label><input id="nId" placeholder="e.g. TVET-001">
       <div class="actions"><button class="btn green" onclick="addNominee()">Save Nominee</button></div>
@@ -105,6 +105,7 @@ const categories=[
 ["Innovation in Teaching & Learning Award",["Innovation|30","Teaching & Learning Impact|25","Creativity|15","Digital/Technology Integration|15","Scalability & Sustainability|10","Evidence|5"]],
 ["Work-Integrated Learning Excellence Award",["WIL Coordination & Quality|25","Industry Partnerships|20","Student Placement & Support|20","Workplace Learning Outcomes|20","Innovation|10","Evidence|5"]]
 ];
+const colleges=["Majuba","Motheo","Ikhala","EEC","EWC","Orbit","Sedibeng","Coastal","Mnambithi","Taletso","KSD","King Hintsa","Elangeni","Nkangala","Vhembe","BCC","Westcol","West Coast","Letaba","SWGC","Gert Sibande","NCU","NCR","Mopani","Boland","Goldfields","Flavius Mareka","CJC","Waterberg","Maluti","Vuselela","Umfolozi","Thekwini","TNC","South Cape"];
 let data=JSON.parse(localStorage.getItem("tvetAwardsData")||'{"nominees":[],"scores":[],"settings":{"max":100,"judges":3}}');
 function save(){localStorage.setItem("tvetAwardsData",JSON.stringify(data));updateAll()}
 function showPage(id){document.querySelectorAll(".page").forEach(p=>p.classList.remove("active"));document.getElementById(id).classList.add("active");document.querySelectorAll(".nav").forEach(b=>b.classList.toggle("active",b.dataset.page===id));updateAll()}
@@ -112,11 +113,12 @@ document.querySelectorAll(".nav").forEach(b=>b.onclick=()=>showPage(b.dataset.pa
 function init(){
  document.getElementById("categoryTable").innerHTML="<tr><th>Category</th><th>Criteria</th></tr>"+categories.map(c=>`<tr><td>${c[0]}</td><td>${c[1].map(x=>x.split("|")[0]+" ("+x.split("|")[1]+"%)").join(", ")}</td></tr>`).join("");
  document.getElementById("nCategory").innerHTML=categories.map((c,i)=>`<option value="${i}">${c[0]}</option>`).join("");
+ document.getElementById("nCollege").innerHTML='<option value="">-- Select College --</option>'+colleges.map(c=>`<option value="${c}">${c}</option>`).join("");
  document.getElementById("maxScore").value=data.settings.max;document.getElementById("judgeCount").value=data.settings.judges;updateAll()
 }
 function addNominee(){
- const name=document.getElementById("nName").value.trim(),college=document.getElementById("nCollege").value.trim(),cat=+document.getElementById("nCategory").value,id=document.getElementById("nId").value.trim()||"TVET-"+String(data.nominees.length+1).padStart(3,"0");
- if(!name||!college){alert("Please enter the nominee name and college.");return}
+ const name=document.getElementById("nName").value.trim(),college=document.getElementById("nCollege").value,cat=+document.getElementById("nCategory").value,id=document.getElementById("nId").value.trim()||"TVET-"+String(data.nominees.length+1).padStart(3,"0");
+ if(!name||!college){alert("Please enter the nominee name and select a college.");return}
  data.nominees.push({id,name,college,cat});save();document.getElementById("nName").value="";document.getElementById("nCollege").value="";document.getElementById("nId").value="";alert("Nominee added.");
 }
 function updateAll(){
