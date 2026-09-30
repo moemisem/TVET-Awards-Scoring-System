@@ -165,7 +165,7 @@ const esc=x=>String(x??"").replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(
 const parseR=(txt,crit)=>{const m={};String(txt||"").split("\n").forEach(l=>{const x=l.match(/^\[(.*?)\] (.*)$/);if(x)m[x[1]]=x[2]});return crit.map(c=>m[c.split("|")[0]]||"")};
 
 // ---------- Google Sheet API (the sheet IS the shared Excel-style record) ----------
-const SHEET_URL="https://script.google.com/macros/s/AKfycbxrUnVuI_ON50dlRmZ8arFd6cV6bQuGGLC0KtTxMoFfucplIl1kCRe59gPQwP8YWxBhkw/exec";   // from Deploy > Web app in Apps Script
+const SHEET_URL="https://script.google.com/macros/s/AKfycbxbteKG2VCg8PyjQmHoy-2V4vPkkIGHp4Z5_8BVe5D1opsGyxAGO9bFT9TYXbVLHyt1/exec";   // from Deploy > Web app in Apps Script
 let PIN=null;
 async function api(action,body={},admin){
  if(admin){PIN=PIN||prompt("Admin PIN:");if(!PIN)throw new Error("cancelled")}
