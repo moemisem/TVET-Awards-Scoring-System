@@ -106,44 +106,7 @@ const categories=[
 ["Work-Integrated Learning Excellence Award",["WIL Coordination & Quality|25","Industry Partnerships|20","Student Placement & Support|20","Workplace Learning Outcomes|20","Innovation|10","Evidence|5"]]
 ];
 const colleges=[
-"Buffalo City TVET College",
-"Boland TVET College",
-"Central Johannesburg TVET College",
-"Coastal TVET College",
-"Eastern Cape Midlands TVET College",
-"Ekurhuleni East TVET College",
-"Ekurhuleni West TVET College",
-"Elangeni TVET College",
-"Flavius Mareka TVET College",
-"Gert Sibande TVET College",
-"Goldfields TVET College",
-"Ikhala TVET College",
-"King Hintsa TVET College",
-"Lephalale TVET College",
-"Letaba TVET College",
-"Majuba TVET College",
-"Maluti TVET College",
-"Mnambithi TVET College",
-"Mopani South East TVET College",
-"Motheo TVET College",
-"Nkangala TVET College",
-"Northern Cape Rural TVET College",
-"Northern Cape Urban TVET College",
-"Orbit TVET College",
-"Sedibeng TVET College",
-"South Cape TVET College",
-"South West Gauteng TVET College",
-"Taletso TVET College",
-"Thekwini TVET College",
-"Tshwane North TVET College",
-"Tshwane South TVET College",
-"Umgungundlovu TVET College",
-"Umfolozi TVET College",
-"Vhembe TVET College",
-"Vuselela TVET College",
-"Waterberg TVET College",
-"West Coast TVET College",
-"Western TVET College"
+"Buffalo City TVET College","Boland TVET College","Central Johannesburg TVET College","Coastal TVET College","Eastern Cape Midlands TVET College","Ekurhuleni East TVET College","Ekurhuleni West TVET College","Elangeni TVET College","Flavius Mareka TVET College","Gert Sibande TVET College","Goldfields TVET College","Ikhala TVET College","King Hintsa TVET College","Lephalale TVET College","Letaba TVET College","Majuba TVET College","Maluti TVET College","Mnambithi TVET College","Mopani South East TVET College","Motheo TVET College","Nkangala TVET College","Northern Cape Rural TVET College","Northern Cape Urban TVET College","Orbit TVET College","Sedibeng TVET College","South Cape TVET College","South West Gauteng TVET College","Taletso TVET College","Thekwini TVET College","Tshwane North TVET College","Tshwane South TVET College","Umgungundlovu TVET College","Umfolozi TVET College","Vhembe TVET College","Vuselela TVET College","Waterberg TVET College","West Coast TVET College","Western TVET College"
 ];
 let data=JSON.parse(localStorage.getItem("tvetAwardsData")||'{"nominees":[],"scores":[],"settings":{"max":100,"judges":3}}');
 function save(){localStorage.setItem("tvetAwardsData",JSON.stringify(data));updateAll()}
@@ -152,7 +115,7 @@ document.querySelectorAll(".nav").forEach(b=>b.onclick=()=>showPage(b.dataset.pa
 function init(){
  document.getElementById("categoryTable").innerHTML="<tr><th>Category</th><th>Criteria</th></tr>"+categories.map(c=>`<tr><td>${c[0]}</td><td>${c[1].map(x=>x.split("|")[0]+" ("+x.split("|")[1]+"%)").join(", ")}</td></tr>`).join("");
  document.getElementById("nCategory").innerHTML=categories.map((c,i)=>`<option value="${i}">${c[0]}</option>`).join("");
- document.getElementById("nCollege").innerHTML='<option value="">-- Select College --</option>'+colleges.map(c=>`<option value="${c}">${c}</option>`).join("");
+ document.getElementById("nCollege").innerHTML='<option value="">-- Select College --</option>'+colleges.map((c,i)=>`<option value="${c}">${String(i+1).padStart(3,"0")} - ${c}</option>`).join("");
  document.getElementById("maxScore").value=data.settings.max;document.getElementById("judgeCount").value=data.settings.judges;updateAll()
 }
 function addNominee(){
@@ -172,33 +135,169 @@ function renderNominees(){
 }
 function deleteNominee(i){if(confirm("Delete this nominee and their scores?")){let id=data.nominees[i].id;data.nominees.splice(i,1);data.scores=data.scores.filter(s=>s.nomineeId!==id);save()}}
 function renderScoreSelect(){let s=document.getElementById("scoreNominee");s.innerHTML='<option value="">-- Select nominee --</option>'+data.nominees.map(n=>`<option value="${n.id}">${n.name} — ${categories[n.cat][0]}</option>`).join("")}
-function loadScoreForm(){
- const id=document.getElementById("scoreNominee").value,n=data.nominees.find(x=>x.id===id),el=document.getElementById("scoreForm");if(!n){el.innerHTML="";return}
- let existing=null;const criteria=categories[n.cat][1];
- el.innerHTML=`<h3 style="margin-top:25px">${categories[n.cat][0]}</h3>`+criteria.map((x,i)=>{let [name,w]=x.split("|");return `<div class="criteria"><div class="criterion-row"><div><b>${name}</b><small style="display:block;color:#68758a">Weight: ${w}%</small></div><input class="score-input" type="number" min="0" max="${data.settings.max}" id="sc${i}" placeholder="0"><div>${w}%</div><div></div></div></div>`}).join("")+
- `<label>Judge Comments</label><textarea id="comments" placeholder="Enter evidence-based comments..."></textarea><div class="actions"><button class="btn green" onclick="submitScore('${id}')">Submit Score</button></div><div id="liveTotal" class="total"></div>`;
- document.querySelectorAll(".score-input").forEach(i=>i.addEventListener("input",calcLive));
-}
-function calcLive(){let n=data.nominees.find(x=>x.id===document.getElementById("scoreNominee").value);if(!n)return;let total=0;categories[n.cat][1].forEach((x,i)=>{let w=+x.split("|")[1],v=+(document.getElementById("sc"+i)?.value||0);total+=v*w/100});document.getElementById("liveTotal").textContent="Current weighted score: "+total.toFixed(2)+"%"}
-function submitScore(id){
- const n=data.nominees.find(x=>x.id===id),judge=document.getElementById("judgeName").value.trim()||"Anonymous Judge",criteria=categories[n.cat][1];let vals=[],total=0;
- criteria.forEach((x,i)=>{let w=+x.split("|")[1],v=+(document.getElementById("sc"+i).value);if(isNaN(v)||v<0||v>data.settings.max) vals.push(null); else {vals.push(v);total+=v*w/100}});
- if(vals.includes(null)){alert("Please enter a valid score for every criterion.");return}
- data.scores.push({nomineeId:id,judge,values:vals,total,comments:document.getElementById("comments").value,date:new Date().toISOString()});save();alert("Score submitted successfully.");loadScoreForm();
-}
-function renderResults(){
- const el=document.getElementById("resultsTable");if(!data.scores.length){el.innerHTML='<div class="empty">No completed scores yet.</div>';return}
- let rows=[];data.nominees.forEach(n=>{let ss=data.scores.filter(s=>s.nomineeId===n.id);if(ss.length){let avg=ss.reduce((a,s)=>a+s.total,0)/ss.length;rows.push({...n,avg,count:ss.length})}});rows.sort((a,b)=>b.avg-a.avg);
- el.innerHTML="<table><tr><th>Rank</th><th>Nominee</th><th>College</th><th>Category</th><th>Judges</th><th>Average</th></tr>"+rows.map((r,i)=>`<tr><td><span class="rank">#${i+1}</span></td><td><b>${r.name}</b></td><td>${r.college}</td><td>${categories[r.cat][0]}</td><td>${r.count}</td><td><b>${r.avg.toFixed(2)}%</b><div class="bar"><i style="width:${Math.min(100,r.avg)}%"></i></div></td></tr>`).join("")+"</table>";
-}
-function saveSettings(){data.settings.max=Math.max(1,Math.min(100,+document.getElementById("maxScore").value||100));data.settings.judges=Math.max(1,+document.getElementById("judgeCount").value||3);save();alert("Settings saved.")}
-function clearScores(){if(confirm("Clear ALL scoring records? Nominees will remain.")){data.scores=[];save()}}
+function loadScoreForm(){}
+function submitScore(){}
+function renderResults(){}
+function saveSettings(){}
+function clearScores(){}
 function exportCSV(){
  let out="Nominee ID,Nominee,College,Category,Judge,Total Score,Comments,Date\n";
  data.scores.forEach(s=>{let n=data.nominees.find(x=>x.id===s.nomineeId);if(n)out+=[n.id,n.name,n.college,categories[n.cat][0],s.judge,s.total.toFixed(2),s.comments||"",s.date].map(v=>`"${String(v).replaceAll('"','""')}"`).join(",")+"\n"});
  let blob=new Blob([out],{type:"text/csv;charset=utf-8"}),a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="TVET_Awards_Scoring_Results.csv";a.click();URL.revokeObjectURL(a.href);
 }
 init();
+
+/* SHARED-SERVER PATCH. Replaces the earlier awards-patch.js entirely.
+   Paste as the LAST thing inside your <script>, after the final init();  */
+(function(){
+const $=id=>document.getElementById(id);
+const X=document.createElement('script');X.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';document.head.appendChild(X);
+try{localStorage.removeItem("tvetAwardsData")}catch(e){}   // nothing is kept in the browser any more
+window.save=()=>updateAll();                                // old save() no longer writes locally
+
+// TODO: replace these placeholder criteria/weights with the ones from the guides
+if(!categories.some(c=>c[0].startsWith("Companies")))categories.push(
+ ["Companies and Institutions Award",["Criterion 1|20","Criterion 2|20","Criterion 3|20","Criterion 4|20","Criterion 5|10","Criterion 6|10"]],
+ ["Industry Professionals Award",["Criterion 1|30","Criterion 2|25","Criterion 3|20","Criterion 4|15","Criterion 5|10"]]);
+const pct=(vals,crit,max)=>vals.reduce((a,v,i)=>a+v/max*(+crit[i].split("|")[1]),0); // always out of 100
+const esc=x=>String(x??"").replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;");
+// per-criterion reasons are stored in the Comments cell as "[Criterion] reason" lines
+const parseR=(txt,crit)=>{const m={};String(txt||"").split("\n").forEach(l=>{const x=l.match(/^\[(.*?)\] (.*)$/);if(x)m[x[1]]=x[2]});return crit.map(c=>m[c.split("|")[0]]||"")};
+
+// ---------- Google Sheet API (the sheet IS the shared Excel-style record) ----------
+const SHEET_URL="https://script.google.com/macros/s/AKfycbxrUnVuI_ON50dlRmZ8arFd6cV6bQuGGLC0KtTxMoFfucplIl1kCRe59gPQwP8YWxBhkw/exec";   // from Deploy > Web app in Apps Script
+let PIN=null;
+async function api(action,body={},admin){
+ if(admin){PIN=PIN||prompt("Admin PIN:");if(!PIN)throw new Error("cancelled")}
+ const r=await fetch(SHEET_URL,{method:"POST",body:JSON.stringify({action,pin:admin?PIN:undefined,...body})}); // plain-text body = no CORS preflight
+ const j=await r.json();
+ if(j.error){if(/PIN/.test(j.error))PIN=null;throw new Error(j.error)}
+ return j;
+}
+const run=f=>async(...a)=>{try{return await f(...a)}catch(e){if(e.message!=="cancelled")alert(e.message)}};
+async function refresh(){const r=await fetch(SHEET_URL);Object.assign(data,await r.json());updateAll()}
+
+// ---------- judge dropdown ----------
+const jn=$('judgeName'),sel=document.createElement('select');sel.id='judgeName';sel.onchange=()=>loadScoreForm();jn.replaceWith(sel);
+sel.insertAdjacentHTML('afterend','<label>Your personal code</label><input id="judgeCode" type="password" autocomplete="off" placeholder="Code given to you by the organisers">');
+function fillJudges(){const v=sel.value;sel.innerHTML='<option value="">-- Select judge --</option>'+data.judges.map(j=>`<option>${j}</option>`).join("");sel.value=v}
+
+// ---------- nominees ----------
+window.addNominee=run(async()=>{
+ const name=$('nName').value.trim(),college=$('nCollege').value,cat=+$('nCategory').value,
+  id=$('nId').value.trim()||"TVET-"+String(data.nominees.length+1).padStart(3,"0");
+ if(!name||!college)return alert("Please enter the nominee name and select a college.");
+ await api("nominee",{id,name,college,cat,catName:categories[cat][0]},true);
+ $('nName').value="";$('nCollege').value="";$('nId').value="";await refresh();alert("Nominee added.");
+});
+window.deleteNominee=run(async i=>{
+ if(!confirm("Delete this nominee and their scores?"))return;
+ await api("deleteNominee",{id:data.nominees[i].id},true);await refresh();
+});
+
+// ---------- scoring form ----------
+window.loadScoreForm=function(){
+ const id=$('scoreNominee').value,n=data.nominees.find(x=>x.id===id),el=$('scoreForm'),j=sel.value;
+ if(!n){el.innerHTML="";return}
+ if(!j){el.innerHTML='<div class="notice">Select your name first.</div>';return}
+ const ex=data.scores.find(s=>s.nomineeId===id&&s.judge===j);
+ el.innerHTML=`<h3 style="margin-top:25px">${categories[n.cat][0]}</h3><label>Conflict of interest</label>
+ <select id="coi"><option value="">-- Declare --</option><option value="none">I have NO conflict of interest with this nominee</option><option value="conflict">I HAVE a conflict - I recuse myself</option></select><div id="coiBody"></div>`;
+ $('coi').onchange=()=>body(n,id,j,ex);
+ if(ex){$('coi').value="none";body(n,id,j,ex)}
+};
+function body(n,id,j,ex){
+ const c=$('coi').value,el=$('coiBody'),crit=categories[n.cat][1],max=data.settings.max;
+ if(c==="conflict"){
+  if(!confirm("Recuse yourself from this nominee? Any score you entered for them will be removed."))return;
+  api("recusal",{nomineeId:id,judge:j,code:$('judgeCode').value.trim()}).then(refresh).catch(e=>alert(e.message));
+  el.innerHTML='<div class="notice">Recusal recorded. You cannot score this nominee.</div>';return}
+ if(c!=="none"){el.innerHTML="";return}
+const lo=max<=10?1:0,rs=parseR(ex&&ex.comments,crit);
+ el.innerHTML=crit.map((x,i)=>{const [name,w]=x.split("|");return `<div class="criteria"><div class="criterion-row"><div><b>${name}</b><small style="display:block;color:#68758a">Weight: ${w}% | Score ${lo}-${max}${max<=10?" (whole numbers)":""}</small></div><input class="score-input" type="number" min="${lo}" max="${max}" step="${max<=10?1:"any"}" id="sc${i}" value="${ex?ex.values[i]:""}" placeholder="${lo}"><div>${w}%</div><div></div></div><input type="text" id="rs${i}" value="${esc(rs[i])}" placeholder="Written reason for this score (required)" style="margin-top:8px"></div>`}).join("")+
+ (ex?`<label>Reason for changing your earlier scores (required)</label><textarea id="changeWhy"></textarea>`:"")+
+ `<div class="actions"><button class="btn green" onclick="submitScore('${id}')">${ex?"Update":"Submit"} Score</button></div><div id="liveTotal" class="total"></div>`;
+ document.querySelectorAll(".score-input").forEach(i=>i.addEventListener("input",()=>live(n)));live(n);
+}
+function live(n){const crit=categories[n.cat][1],vals=crit.map((_,i)=>+($('sc'+i)?.value||0));$('liveTotal').textContent="Current weighted score: "+pct(vals,crit,data.settings.max).toFixed(2)+"%"}
+
+window.submitScore=run(async id=>{
+ const n=data.nominees.find(x=>x.id===id),j=sel.value,crit=categories[n.cat][1],max=data.settings.max;
+ if(!j)return alert("Select your name.");
+ if($('coi').value!=="none")return alert("Declare no conflict of interest before scoring.");
+ const lo=max<=10?1:0;
+ const vals=crit.map((_,i)=>{const t=$('sc'+i).value,v=t===""?NaN:+t;return isNaN(v)||v<lo||v>max||(max<=10&&!Number.isInteger(v))?null:v});
+ if(vals.includes(null))return alert("Enter a valid score ("+lo+"-"+max+(max<=10?", whole numbers":"")+") for every criterion.");
+ const rs=crit.map((_,i)=>$('rs'+i).value.trim().replace(/\s+/g," "));
+ if(rs.some(r=>r.length<5))return alert("Give a written reason for every criterion score.");
+ const code=$('judgeCode').value.trim();if(!code)return alert("Enter your personal judge code.");
+ const com=crit.map((c,i)=>"["+c.split("|")[0]+"] "+rs[i]).join("\n");
+ const old=data.scores.find(s=>s.nomineeId===id&&s.judge===j),total=pct(vals,crit,max);let log=null;
+ if(old){const why=$('changeWhy').value.trim();if(!why)return alert("State the reason for changing your earlier score.");
+  log={date:new Date().toISOString(),nomineeId:id,judge:j,oldTotal:+old.total.toFixed(2),newTotal:+total.toFixed(2),reason:why}}
+ await api("score",{rec:{nomineeId:id,judge:j,values:vals,total,coi:"none",comments:com},log,code});
+ await refresh();alert("Score saved to the shared record.");loadScoreForm();
+});
+
+// ---------- results ----------
+window.renderResults=function(){
+ const el=$('resultsTable');if(!data.scores.length){el.innerHTML='<div class="empty">No completed scores yet.</div>';return}
+ const req=data.settings.judges,q=data.settings.qualify;let rows=[];
+ data.nominees.forEach(n=>{const ss=data.scores.filter(s=>s.nomineeId===n.id);if(ss.length)rows.push({...n,avg:ss.reduce((a,s)=>a+s.total,0)/ss.length,count:ss.length,done:ss.length>=req})});
+ rows.sort((a,b)=>a.cat-b.cat||b.done-a.done||b.avg-a.avg);let last=-1,rk=0;
+ el.innerHTML="<table><tr><th>Rank</th><th>Nominee</th><th>College</th><th>Category</th><th>Judges</th><th>Average</th><th>Status</th></tr>"+rows.map(r=>{
+  if(r.cat!==last){last=r.cat;rk=0}
+  return `<tr><td><span class="rank">${r.done?"#"+(++rk):"-"}</span></td><td><b>${r.name}</b></td><td>${r.college}</td><td>${categories[r.cat][0]}</td><td>${r.count}/${req}</td><td><b>${r.avg.toFixed(2)}%</b><div class="bar"><i style="width:${Math.min(100,r.avg)}%"></i></div></td><td><span class="badge">${!r.done?"Awaiting judges":r.avg>=q?"Qualifies":"Below "+q+"%"}</span></td></tr>`}).join("")+"</table>";
+};
+window.clearScores=run(async()=>{
+ if(!confirm("Clear ALL scoring records for EVERY judge? This cannot be undone."))return;
+ await api("clear",{},true);await refresh();
+});
+
+// ---------- settings ----------
+window.saveSettings=run(async()=>{
+ const np=$('newPin').value.trim();
+ await api("settings",{max:$('maxScore').value,judges:$('judgeCount').value,qualify:$('qualify').value,
+  judgeList:$('judgeList').value.split("\n"),newPin:np},true);
+ if(np)PIN=np;$('newPin').value="";await refresh();alert("Settings saved.");
+});
+$('settings').insertAdjacentHTML('beforeend',`<div class="panel"><h3>Judges, qualifying line & admin PIN</h3>
+ <label>Judge list (one name per line)</label><textarea id="judgeList" style="min-height:120px"></textarea>
+ <label>Qualifying line (% of 100)</label><input id="qualify" type="number" min="0" max="100">
+ <label>New admin PIN (leave blank to keep)</label><input id="newPin" type="password">
+ <div class="notice">For the 1-5 guides set "Maximum score per criterion" to 5 and the qualifying line to 70. Then click Save Settings above.</div></div>`);
+
+// ---------- Excel master export ----------
+$('results').querySelector('.hero p').textContent="Results are calculated from every judge's submitted scores, held in one shared Google Sheet the organisers can open and download as Excel.";
+$('results').querySelector('.actions').insertAdjacentHTML('beforeend',`<button class="btn green" onclick="exportXLSX()">Export Master (Excel)</button><button class="btn gold" onclick="refresh_()">Refresh</button>`);
+window.refresh_=run(refresh);
+window.exportXLSX=run(async()=>{
+ if(!window.XLSX)return alert("Excel library not loaded yet - check internet and retry.");
+ await api("verify",{},true);await refresh();
+ const rows=data.scores.map(s=>{const n=data.nominees.find(x=>x.id===s.nomineeId)||{},r={"Nominee ID":s.nomineeId,Nominee:n.name,College:n.college,Category:n.cat!=null?categories[n.cat][0]:"",Judge:s.judge};
+  s.values.forEach((v,i)=>r["Score "+(i+1)]=v);return Object.assign(r,{"Total %":+s.total.toFixed(2),COI:s.coi||"",Comments:s.comments||"",Date:s.date})});
+ const wb=XLSX.utils.book_new(),add=(n,a)=>XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(a),n);
+ add("Scores",rows);
+ add("Nominees",data.nominees.map(n=>({ID:n.id,Nominee:n.name,College:n.college,Category:categories[n.cat][0]})));
+ add("Change Log",data.log);add("Recusals",data.recusals);
+ XLSX.writeFile(wb,"TVET_Awards_MASTER.xlsx");
+});
+
+// ---------- UI refresh + live updates ----------
+const oldUpdate=window.updateAll;
+window.updateAll=function(){
+ const v=$('scoreNominee').value;oldUpdate();$('scoreNominee').value=v;fillJudges();
+ $('statCategories').textContent=categories.length;
+ const mx=data.settings.max,lw=mx<=10?1:0;
+ $('scoring').querySelector('.hero p').textContent="Score each criterion from "+lw+" to "+mx+(mx<=10?" (whole numbers)":"")+" and give a written reason for every score. The app applies the weights automatically.";
+ $('maxScore').value=data.settings.max;$('judgeCount').value=data.settings.judges;
+ $('qualify').value=data.settings.qualify??70;$('judgeList').value=(data.judges||[]).join("\n");
+};
+data.judges=[];data.log=[];data.recusals=[];data.scores=[];data.nominees=[];   // start empty; server is the only source
+init();
+refresh().catch(()=>alert("Cannot reach the scoring sheet (check SHEET_URL). Nothing is stored on this device - check your connection."));
+setInterval(()=>{const a=document.querySelector('.page.active').id;if(a==='results'||a==='dashboard')refresh().catch(()=>{})},15000);
+})();
 </script>
 </body>
 </html>
