@@ -96,19 +96,29 @@ table{width:100%;border-collapse:collapse}th,td{padding:11px;border-bottom:1px s
 </main>
 
 <script>
+// Nominee and college names come from a shared Google Sheet that several people can
+// edit. Anything from the sheet is escaped before it is written into the page, so a
+// stray angle bracket in a name stays text and cannot run as code.
+function escHTML(x){return String(x==null?"":x).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;")}
+
+// The six criteria and their weights come from the approved awards framework.
+// They are the same for every category. Scores are 1 to 5 per criterion, which
+// gives a total out of 100: straight 3s = 60, straight 4s = 80, straight 5s = 100.
+const CRITERIA=["Teaching Effectiveness|25","Student Performance|20","Industry Alignment and Work-Integrated Learning|20","Innovation and Digital Teaching|15","Professional Development|10","Student Feedback|10"];
 const categories=[
-["National TVET Lecturer of the Year",["Teaching & Learning Excellence|25","Student Success & Support|20","Professional Development|15","Leadership & Contribution|15","Innovation & Impact|15","Evidence of Excellence|10"]],
-["Engineering Lecturer Excellence Award",["Engineering Teaching Excellence|25","Practical Skills Development|20","Industry Relevance|20","Student Achievement|15","Innovation|10","Evidence|10"]],
-["Business & Utility Studies Lecturer Excellence Award",["Teaching Excellence|25","Industry & Workplace Relevance|20","Student Achievement|20","Innovation in Delivery|15","Professional Development|10","Evidence|10"]],
-["Occupational Programmes Lecturer Excellence Award",["Occupational Teaching Excellence|25","Practical/Workplace Training|25","Industry Alignment|20","Student Competence & Outcomes|15","Innovation|10","Evidence|5"]],
-["Emerging TVET Lecturer Award",["Teaching Potential|25","Professional Growth|20","Innovation|20","Student Support|15","Contribution to TVET|10","Evidence|10"]],
-["Innovation in Teaching & Learning Award",["Innovation|30","Teaching & Learning Impact|25","Creativity|15","Digital/Technology Integration|15","Scalability & Sustainability|10","Evidence|5"]],
-["Work-Integrated Learning Excellence Award",["WIL Coordination & Quality|25","Industry Partnerships|20","Student Placement & Support|20","Workplace Learning Outcomes|20","Innovation|10","Evidence|5"]]
+ ["National TVET Lecturer of the Year",CRITERIA],
+ ["Engineering Lecturer Excellence Award",CRITERIA],
+ ["Business and Utility Studies Lecturer Excellence Award",CRITERIA],
+ ["Occupational Programmes Lecturer Excellence Award",CRITERIA],
+ ["Emerging TVET Lecturer Award",CRITERIA],
+ ["Innovation in Teaching and Learning Award",CRITERIA],
+ ["Work-Integrated Learning Excellence Award",CRITERIA]
 ];
 const colleges=[
 "Buffalo City TVET College","Boland TVET College","Central Johannesburg TVET College","Coastal TVET College","Eastern Cape Midlands TVET College","Ekurhuleni East TVET College","Ekurhuleni West TVET College","Elangeni TVET College","Flavius Mareka TVET College","Gert Sibande TVET College","Goldfields TVET College","Ikhala TVET College","King Hintsa TVET College","Lephalale TVET College","Letaba TVET College","Majuba TVET College","Maluti TVET College","Mnambithi TVET College","Mopani South East TVET College","Motheo TVET College","Nkangala TVET College","Northern Cape Rural TVET College","Northern Cape Urban TVET College","Orbit TVET College","Sedibeng TVET College","South Cape TVET College","South West Gauteng TVET College","Taletso TVET College","Thekwini TVET College","Tshwane North TVET College","Tshwane South TVET College","Umgungundlovu TVET College","Umfolozi TVET College","Vhembe TVET College","Vuselela TVET College","Waterberg TVET College","West Coast TVET College","Western TVET College"
 ];
-let data=JSON.parse(localStorage.getItem("tvetAwardsData")||'{"nominees":[],"scores":[],"settings":{"max":100,"judges":3}}');
+// Framework defaults: 1-5 per criterion, three judges per nominee, 70 to qualify.
+let data=JSON.parse(localStorage.getItem("tvetAwardsData")||'{"nominees":[],"scores":[],"settings":{"max":5,"judges":3,"qualify":70}}');
 function save(){localStorage.setItem("tvetAwardsData",JSON.stringify(data));updateAll()}
 function showPage(id){document.querySelectorAll(".page").forEach(p=>p.classList.remove("active"));document.getElementById(id).classList.add("active");document.querySelectorAll(".nav").forEach(b=>b.classList.toggle("active",b.dataset.page===id));updateAll()}
 document.querySelectorAll(".nav").forEach(b=>b.onclick=()=>showPage(b.dataset.page));
@@ -131,10 +141,11 @@ function updateAll(){
 }
 function renderNominees(){
  const el=document.getElementById("nomineeList");if(!data.nominees.length){el.innerHTML='<div class="empty">No nominees added yet.</div>';return}
- el.innerHTML="<table><tr><th>ID</th><th>Nominee</th><th>College</th><th>Category</th><th></th></tr>"+data.nominees.map((n,i)=>`<tr><td>${n.id}</td><td><b>${n.name}</b></td><td>${n.college}</td><td><span class="badge">${categories[n.cat][0]}</span></td><td><button class="btn red" onclick="deleteNominee(${i})">Delete</button></td></tr>`).join("")+"</table>";
+ el.innerHTML="<table><tr><th>ID</th><th>Nominee</th><th>College</th><th>Category</th><th></th></tr>"+data.nominees.map(n=>`<tr><td>${escHTML(n.id)}</td><td><b>${escHTML(n.name)}</b></td><td>${escHTML(n.college)}</td><td><span class="badge">${escHTML(categories[n.cat]?categories[n.cat][0]:"")}</span></td><td><button class="btn red" data-del="${escHTML(n.id)}">Delete</button></td></tr>`).join("")+"</table>";
+ el.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>deleteNominee(b.dataset.del));
 }
-function deleteNominee(i){if(confirm("Delete this nominee and their scores?")){let id=data.nominees[i].id;data.nominees.splice(i,1);data.scores=data.scores.filter(s=>s.nomineeId!==id);save()}}
-function renderScoreSelect(){let s=document.getElementById("scoreNominee");s.innerHTML='<option value="">-- Select nominee --</option>'+data.nominees.map(n=>`<option value="${n.id}">${n.name} — ${categories[n.cat][0]}</option>`).join("")}
+function deleteNominee(id){if(confirm("Delete this nominee and their scores?")){data.nominees=data.nominees.filter(n=>n.id!==id);data.scores=data.scores.filter(s=>s.nomineeId!==id);save()}}
+function renderScoreSelect(){let s=document.getElementById("scoreNominee");s.innerHTML='<option value="">-- Select nominee --</option>'+data.nominees.map(n=>`<option value="${escHTML(n.id)}">${escHTML(n.name)} \u2014 ${escHTML(categories[n.cat]?categories[n.cat][0]:"")}</option>`).join("")}
 function loadScoreForm(){}
 function submitScore(){}
 function renderResults(){}
@@ -155,17 +166,25 @@ const X=document.createElement('script');X.src='https://cdnjs.cloudflare.com/aja
 try{localStorage.removeItem("tvetAwardsData")}catch(e){}   // nothing is kept in the browser any more
 window.save=()=>updateAll();                                // old save() no longer writes locally
 
-// TODO: replace these placeholder criteria/weights with the ones from the guides
-if(!categories.some(c=>c[0].startsWith("Companies")))categories.push(
- ["Companies and Institutions Award",["Criterion 1|20","Criterion 2|20","Criterion 3|20","Criterion 4|20","Criterion 5|10","Criterion 6|10"]],
- ["Industry Professionals Award",["Criterion 1|30","Criterion 2|25","Criterion 3|20","Criterion 4|15","Criterion 5|10"]]);
+// Criteria and weights now come from the approved framework, set once at the top
+// of this file. All seven categories use the same six criteria.
+// Recognition bands from the framework. A nominee is placed by the panel average.
+// The wording behind each point on the scale, from the framework. Judges see it on the
+// scoring form so that a 4 means the same thing to everyone on the panel.
+const SCALE=[[1,"Poor","Does not meet requirements. Little or no supporting evidence."],
+ [2,"Fair","Partially meets requirements. Significant gaps in evidence or impact."],
+ [3,"Good","Meets requirements with sufficient supporting evidence."],
+ [4,"Very good","Exceeds requirements with strong evidence and measurable impact."],
+ [5,"Outstanding","Exceptional evidence of innovation, sustainability and sector-wide impact."]];
+const BANDS=[[90,"National Excellence Winner"],[80,"Finalist Recognition"],[70,"Merit Recognition"],[0,"Does not qualify"]];
+const bandOf=v=>(BANDS.find(b=>v>=b[0])||BANDS[BANDS.length-1])[1];
 const pct=(vals,crit,max)=>vals.reduce((a,v,i)=>a+v/max*(+crit[i].split("|")[1]),0); // always out of 100
 const esc=x=>String(x??"").replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;");
 // per-criterion reasons are stored in the Comments cell as "[Criterion] reason" lines
 const parseR=(txt,crit)=>{const m={};String(txt||"").split("\n").forEach(l=>{const x=l.match(/^\[(.*?)\] (.*)$/);if(x)m[x[1]]=x[2]});return crit.map(c=>m[c.split("|")[0]]||"")};
 
 // ---------- Google Sheet API (the sheet IS the shared Excel-style record) ----------
-const SHEET_URL="https://script.google.com/macros/s/AKfycbxbteKG2VCg8PyjQmHoy-2V4vPkkIGHp4Z5_8BVe5D1opsGyxAGO9bFT9TYXbVLHyt1/exec";
+const SHEET_URL="https://script.google.com/macros/s/AKfycbxrUnVuI_ON50dlRmZ8arFd6cV6bQuGGLC0KtTxMoFfucplIl1kCRe59gPQwP8YWxBhkw/exec";   // from Deploy > Web app in Apps Script
 let PIN=null;
 async function api(action,body={},admin){
  if(admin){PIN=PIN||prompt("Admin PIN:");if(!PIN)throw new Error("cancelled")}
@@ -190,9 +209,14 @@ window.addNominee=run(async()=>{
  await api("nominee",{id,name,college,cat,catName:categories[cat][0]},true);
  $('nName').value="";$('nCollege').value="";$('nId').value="";await refresh();alert("Nominee added.");
 });
-window.deleteNominee=run(async i=>{
- if(!confirm("Delete this nominee and their scores?"))return;
- await api("deleteNominee",{id:data.nominees[i].id},true);await refresh();
+// Identify the nominee by id, not by row position. Two administrators working at the
+// same time can reorder the sheet between a page refresh and a click, and a positional
+// delete would then remove the wrong person.
+window.deleteNominee=run(async id=>{
+ const n=data.nominees.find(x=>x.id===id);
+ if(!n)return alert("That nominee is no longer on the register. Refreshing.");
+ if(!confirm("Delete "+n.name+" and their scores?"))return;
+ await api("deleteNominee",{id},true);await refresh();
 });
 
 // ---------- scoring form ----------
@@ -214,7 +238,8 @@ function body(n,id,j,ex){
   el.innerHTML='<div class="notice">Recusal recorded. You cannot score this nominee.</div>';return}
  if(c!=="none"){el.innerHTML="";return}
 const lo=max<=10?1:0,rs=parseR(ex&&ex.comments,crit);
- el.innerHTML=crit.map((x,i)=>{const [name,w]=x.split("|");return `<div class="criteria"><div class="criterion-row"><div><b>${name}</b><small style="display:block;color:#68758a">Weight: ${w}% | Score ${lo}-${max}${max<=10?" (whole numbers)":""}</small></div><input class="score-input" type="number" min="${lo}" max="${max}" step="${max<=10?1:"any"}" id="sc${i}" value="${ex?ex.values[i]:""}" placeholder="${lo}"><div>${w}%</div><div></div></div><input type="text" id="rs${i}" value="${esc(rs[i])}" placeholder="Written reason for this score (required)" style="margin-top:8px"></div>`}).join("")+
+ const guide=max===5?'<div class="notice" style="margin-bottom:18px">'+SCALE.map(x=>"<b>"+x[0]+" "+x[1]+"</b> &middot; "+x[2]).join("<br>")+'</div>':"";
+ el.innerHTML=guide+crit.map((x,i)=>{const [name,w]=x.split("|");return `<div class="criteria"><div class="criterion-row"><div><b>${escHTML(name)}</b><small style="display:block;color:#68758a">Weight: ${w}% | Score ${lo}-${max}${max<=10?" (whole numbers)":""}</small></div><input class="score-input" type="number" min="${lo}" max="${max}" step="${max<=10?1:"any"}" id="sc${i}" value="${ex?ex.values[i]:""}" placeholder="${lo}"><div>${w}%</div><div></div></div><input type="text" id="rs${i}" value="${esc(rs[i])}" placeholder="Written reason for this score (required)" style="margin-top:8px"></div>`}).join("")+
  (ex?`<label>Reason for changing your earlier scores (required)</label><textarea id="changeWhy"></textarea>`:"")+
  `<div class="actions"><button class="btn green" onclick="submitScore('${id}')">${ex?"Update":"Submit"} Score</button></div><div id="liveTotal" class="total"></div>`;
  document.querySelectorAll(".score-input").forEach(i=>i.addEventListener("input",()=>live(n)));live(n);
@@ -243,11 +268,16 @@ window.submitScore=run(async id=>{
 window.renderResults=function(){
  const el=$('resultsTable');if(!data.scores.length){el.innerHTML='<div class="empty">No completed scores yet.</div>';return}
  const req=data.settings.judges,q=data.settings.qualify;let rows=[];
- data.nominees.forEach(n=>{const ss=data.scores.filter(s=>s.nomineeId===n.id);if(ss.length)rows.push({...n,avg:ss.reduce((a,s)=>a+s.total,0)/ss.length,count:ss.length,done:ss.length>=req})});
+ data.nominees.forEach(n=>{const ss=data.scores.filter(s=>s.nomineeId===n.id);if(!ss.length)return;
+  const tot=ss.map(s=>s.total);
+  rows.push({...n,avg:tot.reduce((a,b)=>a+b,0)/tot.length,count:ss.length,done:ss.length>=req,
+   spread:tot.length>1?Math.max(...tot)-Math.min(...tot):0})});
  rows.sort((a,b)=>a.cat-b.cat||b.done-a.done||b.avg-a.avg);let last=-1,rk=0;
  el.innerHTML="<table><tr><th>Rank</th><th>Nominee</th><th>College</th><th>Category</th><th>Judges</th><th>Average</th><th>Status</th></tr>"+rows.map(r=>{
   if(r.cat!==last){last=r.cat;rk=0}
-  return `<tr><td><span class="rank">${r.done?"#"+(++rk):"-"}</span></td><td><b>${r.name}</b></td><td>${r.college}</td><td>${categories[r.cat][0]}</td><td>${r.count}/${req}</td><td><b>${r.avg.toFixed(2)}%</b><div class="bar"><i style="width:${Math.min(100,r.avg)}%"></i></div></td><td><span class="badge">${!r.done?"Awaiting judges":r.avg>=q?"Qualifies":"Below "+q+"%"}</span></td></tr>`}).join("")+"</table>";
+  const band=r.done?bandOf(r.avg):null;
+  const spread=r.spread>=(data.settings.spread||15)?` <span class="badge" title="The judges are ${r.spread.toFixed(1)} points apart on this nominee" style="background:#fdecea;color:#c0392b">Wide spread ${r.spread.toFixed(1)}</span>`:"";
+  return `<tr><td><span class="rank">${r.done?"#"+(++rk):"-"}</span></td><td><b>${escHTML(r.name)}</b>${spread}</td><td>${escHTML(r.college)}</td><td>${escHTML(categories[r.cat]?categories[r.cat][0]:"")}</td><td>${r.count}/${req}</td><td><b>${r.avg.toFixed(2)}%</b><div class="bar"><i style="width:${Math.min(100,r.avg)}%"></i></div></td><td><span class="badge"${r.done&&r.avg<70?' style="background:#fdecea;color:#c0392b"':r.done&&r.avg>=90?' style="background:#fdf6e3;color:#8a6d1a"':''}>${!r.done?"Awaiting judges":escHTML(band)}</span></td></tr>`}).join("")+"</table>";
 };
 window.clearScores=run(async()=>{
  if(!confirm("Clear ALL scoring records for EVERY judge? This cannot be undone."))return;
@@ -258,14 +288,16 @@ window.clearScores=run(async()=>{
 window.saveSettings=run(async()=>{
  const np=$('newPin').value.trim();
  await api("settings",{max:$('maxScore').value,judges:$('judgeCount').value,qualify:$('qualify').value,
-  judgeList:$('judgeList').value.split("\n"),newPin:np},true);
+  spread:$('spread').value,judgeList:$('judgeList').value.split("\n"),newPin:np},true);
  if(np)PIN=np;$('newPin').value="";await refresh();alert("Settings saved.");
 });
-$('settings').insertAdjacentHTML('beforeend',`<div class="panel"><h3>Judges, qualifying line & admin PIN</h3>
+$('settings').insertAdjacentHTML('beforeend',`<div class="panel"><h3>Judges, thresholds &amp; admin PIN</h3>
  <label>Judge list (one name per line)</label><textarea id="judgeList" style="min-height:120px"></textarea>
  <label>Qualifying line (% of 100)</label><input id="qualify" type="number" min="0" max="100">
+ <label>Flag a nominee when the judges are this many points apart</label><input id="spread" type="number" min="1" max="60">
  <label>New admin PIN (leave blank to keep)</label><input id="newPin" type="password">
- <div class="notice">For the 1-5 guides set "Maximum score per criterion" to 5 and the qualifying line to 70. Then click Save Settings above.</div></div>`);
+ <div class="notice"><b>Recognition bands.</b> 90 and above National Excellence Winner, 80 to 89 Finalist Recognition, 70 to 79 Merit Recognition, below 70 does not qualify. These come from the framework and are applied automatically.</div>
+ <div class="notice" style="border-left-color:#c0392b"><b>Do not change "Maximum score per criterion" once judging has started.</b> Every total already captured is worked out against it, so changing it re-bases scores that have already been submitted. The framework uses 1 to 5, so it should stay on 5.</div></div>`);
 
 // ---------- Excel master export ----------
 $('results').querySelector('.hero p').textContent="Results are calculated from every judge's submitted scores, held in one shared Google Sheet the organisers can open and download as Excel.";
@@ -291,7 +323,7 @@ window.updateAll=function(){
  const mx=data.settings.max,lw=mx<=10?1:0;
  $('scoring').querySelector('.hero p').textContent="Score each criterion from "+lw+" to "+mx+(mx<=10?" (whole numbers)":"")+" and give a written reason for every score. The app applies the weights automatically.";
  $('maxScore').value=data.settings.max;$('judgeCount').value=data.settings.judges;
- $('qualify').value=data.settings.qualify??70;$('judgeList').value=(data.judges||[]).join("\n");
+ $('qualify').value=data.settings.qualify??70;$('spread').value=data.settings.spread??15;$('judgeList').value=(data.judges||[]).join("\n");
 };
 data.judges=[];data.log=[];data.recusals=[];data.scores=[];data.nominees=[];   // start empty; server is the only source
 init();
