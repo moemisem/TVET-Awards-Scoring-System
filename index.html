@@ -158,24 +158,20 @@ function exportCSV(){
 }
 init();
 
-/* SHARED-SERVER PATCH. Replaces the earlier awards-patch.js entirely.
-   Paste as the LAST thing inside your <script>, after the final init();  */
+/* SHARED-SERVER PATCH (one copy only). */
 (function(){
 const $=id=>document.getElementById(id);
 const X=document.createElement('script');X.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';document.head.appendChild(X);
 try{localStorage.removeItem("tvetAwardsData")}catch(e){}   // nothing is kept in the browser any more
 window.save=()=>updateAll();                                // old save() no longer writes locally
 
-// Criteria and weights now come from the approved framework, set once at the top
-// of this file. All seven categories use the same six criteria.
-// Recognition bands from the framework. A nominee is placed by the panel average.
-// The wording behind each point on the scale, from the framework. Judges see it on the
-// scoring form so that a 4 means the same thing to everyone on the panel.
+// The wording behind each point on the scale, from the framework.
 const SCALE=[[1,"Poor","Does not meet requirements. Little or no supporting evidence."],
  [2,"Fair","Partially meets requirements. Significant gaps in evidence or impact."],
  [3,"Good","Meets requirements with sufficient supporting evidence."],
  [4,"Very good","Exceeds requirements with strong evidence and measurable impact."],
  [5,"Outstanding","Exceptional evidence of innovation, sustainability and sector-wide impact."]];
+// Recognition bands from the framework. A nominee is placed by the panel average.
 const BANDS=[[90,"National Excellence Winner"],[80,"Finalist Recognition"],[70,"Merit Recognition"],[0,"Does not qualify"]];
 const bandOf=v=>(BANDS.find(b=>v>=b[0])||BANDS[BANDS.length-1])[1];
 const pct=(vals,crit,max)=>vals.reduce((a,v,i)=>a+v/max*(+crit[i].split("|")[1]),0); // always out of 100
@@ -183,8 +179,10 @@ const esc=x=>String(x??"").replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(
 // per-criterion reasons are stored in the Comments cell as "[Criterion] reason" lines
 const parseR=(txt,crit)=>{const m={};String(txt||"").split("\n").forEach(l=>{const x=l.match(/^\[(.*?)\] (.*)$/);if(x)m[x[1]]=x[2]});return crit.map(c=>m[c.split("|")[0]]||"")};
 
-// ---------- Google Sheet API (the sheet IS the shared Excel-style record) ----------
-const SHEET_URL="https://script.google.com/macros/s/AKfycbxrUnVuI_ON50dlRmZ8arFd6cV6bQuGGLC0KtTxMoFfucplIl1kCRe59gPQwP8YWxBhkw/exec";   // from Deploy > Web app in Apps Script
+// ---------- Google Sheet API ----------
+// IMPORTANT: this must be the Web app URL of the deployment that runs the latest Code.gs
+// (https://script.google.com/macros/s/....../exec)
+const SHEET_URL="https://script.google.com/macros/s/AKfycbxrUnVuI_ON50dlRmZ8arFd6cV6bQuGGLC0KtTxMoFfucplIl1kCRe59gPQwP8YWxBhkw/exec";
 let PIN=null;
 async function api(action,body={},admin){
  if(admin){PIN=PIN||prompt("Admin PIN:");if(!PIN)throw new Error("cancelled")}
@@ -194,12 +192,19 @@ async function api(action,body={},admin){
  return j;
 }
 const run=f=>async(...a)=>{try{return await f(...a)}catch(e){if(e.message!=="cancelled")alert(e.message)}};
-async function refresh(){const r=await fetch(SHEET_URL);Object.assign(data,await r.json());updateAll()}
+// Scoped read: admin PIN gets everything, a judge's name + code gets only that judge's own rows.
+async function refresh(){
+ const j=sel.value,c=(($('judgeCode')||{}).value||"").trim();
+ const r=await fetch(SHEET_URL,{method:"POST",body:JSON.stringify({action:"read",pin:PIN||undefined,judge:j||undefined,code:c||undefined})});
+ const d=await r.json();if(d.error){if(/PIN/.test(d.error))PIN=null;throw new Error(d.error)}
+ Object.assign(data,d);updateAll()}
+window.unlock=run(async()=>{PIN=prompt("Admin PIN:");if(!PIN)return;try{await refresh()}catch(e){PIN=null;throw e}});
 
 // ---------- judge dropdown ----------
-const jn=$('judgeName'),sel=document.createElement('select');sel.id='judgeName';sel.onchange=()=>loadScoreForm();jn.replaceWith(sel);
+const jn=$('judgeName'),sel=document.createElement('select');sel.id='judgeName';sel.onchange=()=>refresh().then(()=>loadScoreForm()).catch(()=>{});jn.replaceWith(sel);
 sel.insertAdjacentHTML('afterend','<label>Your personal code</label><input id="judgeCode" type="password" autocomplete="off" placeholder="Code given to you by the organisers">');
-function fillJudges(){const v=sel.value;sel.innerHTML='<option value="">-- Select judge --</option>'+data.judges.map(j=>`<option>${j}</option>`).join("");sel.value=v}
+$('judgeCode').onchange=()=>refresh().then(()=>loadScoreForm()).catch(()=>{});
+function fillJudges(){const v=sel.value;sel.innerHTML='<option value="">-- Select judge --</option>'+data.judges.map(j=>`<option>${escHTML(j)}</option>`).join("");sel.value=v}
 
 // ---------- nominees ----------
 window.addNominee=run(async()=>{
@@ -209,9 +214,7 @@ window.addNominee=run(async()=>{
  await api("nominee",{id,name,college,cat,catName:categories[cat][0]},true);
  $('nName').value="";$('nCollege').value="";$('nId').value="";await refresh();alert("Nominee added.");
 });
-// Identify the nominee by id, not by row position. Two administrators working at the
-// same time can reorder the sheet between a page refresh and a click, and a positional
-// delete would then remove the wrong person.
+// Identify the nominee by id, not by row position.
 window.deleteNominee=run(async id=>{
  const n=data.nominees.find(x=>x.id===id);
  if(!n)return alert("That nominee is no longer on the register. Refreshing.");
@@ -225,7 +228,7 @@ window.loadScoreForm=function(){
  if(!n){el.innerHTML="";return}
  if(!j){el.innerHTML='<div class="notice">Select your name first.</div>';return}
  const ex=data.scores.find(s=>s.nomineeId===id&&s.judge===j);
- el.innerHTML=`<h3 style="margin-top:25px">${categories[n.cat][0]}</h3><label>Conflict of interest</label>
+ el.innerHTML=`<h3 style="margin-top:25px">${escHTML(categories[n.cat][0])}</h3><label>Conflict of interest</label>
  <select id="coi"><option value="">-- Declare --</option><option value="none">I have NO conflict of interest with this nominee</option><option value="conflict">I HAVE a conflict - I recuse myself</option></select><div id="coiBody"></div>`;
  $('coi').onchange=()=>body(n,id,j,ex);
  if(ex){$('coi').value="none";body(n,id,j,ex)}
@@ -237,11 +240,11 @@ function body(n,id,j,ex){
   api("recusal",{nomineeId:id,judge:j,code:$('judgeCode').value.trim()}).then(refresh).catch(e=>alert(e.message));
   el.innerHTML='<div class="notice">Recusal recorded. You cannot score this nominee.</div>';return}
  if(c!=="none"){el.innerHTML="";return}
-const lo=max<=10?1:0,rs=parseR(ex&&ex.comments,crit);
+ const lo=max<=10?1:0,rs=parseR(ex&&ex.comments,crit);
  const guide=max===5?'<div class="notice" style="margin-bottom:18px">'+SCALE.map(x=>"<b>"+x[0]+" "+x[1]+"</b> &middot; "+x[2]).join("<br>")+'</div>':"";
  el.innerHTML=guide+crit.map((x,i)=>{const [name,w]=x.split("|");return `<div class="criteria"><div class="criterion-row"><div><b>${escHTML(name)}</b><small style="display:block;color:#68758a">Weight: ${w}% | Score ${lo}-${max}${max<=10?" (whole numbers)":""}</small></div><input class="score-input" type="number" min="${lo}" max="${max}" step="${max<=10?1:"any"}" id="sc${i}" value="${ex?ex.values[i]:""}" placeholder="${lo}"><div>${w}%</div><div></div></div><input type="text" id="rs${i}" value="${esc(rs[i])}" placeholder="Written reason for this score (required)" style="margin-top:8px"></div>`}).join("")+
  (ex?`<label>Reason for changing your earlier scores (required)</label><textarea id="changeWhy"></textarea>`:"")+
- `<div class="actions"><button class="btn green" onclick="submitScore('${id}')">${ex?"Update":"Submit"} Score</button></div><div id="liveTotal" class="total"></div>`;
+ `<div class="actions"><button class="btn green" onclick="submitScore('${escHTML(id)}')">${ex?"Update":"Submit"} Score</button></div><div id="liveTotal" class="total"></div>`;
  document.querySelectorAll(".score-input").forEach(i=>i.addEventListener("input",()=>live(n)));live(n);
 }
 function live(n){const crit=categories[n.cat][1],vals=crit.map((_,i)=>+($('sc'+i)?.value||0));$('liveTotal').textContent="Current weighted score: "+pct(vals,crit,data.settings.max).toFixed(2)+"%"}
@@ -264,10 +267,12 @@ window.submitScore=run(async id=>{
  await refresh();alert("Score saved to the shared record.");loadScoreForm();
 });
 
-// ---------- results ----------
+// ---------- results (administrator only) ----------
 window.renderResults=function(){
- const el=$('resultsTable');if(!data.scores.length){el.innerHTML='<div class="empty">No completed scores yet.</div>';return}
- const req=data.settings.judges,q=data.settings.qualify;let rows=[];
+ const el=$('resultsTable');
+ if(!PIN){el.innerHTML='<div class="empty">Results are visible to the administrator only.<br><br><button class="btn gold" onclick="unlock()">Unlock results (admin)</button></div>';return}
+ if(!data.scores.length){el.innerHTML='<div class="empty">No completed scores yet.</div>';return}
+ const req=data.settings.judges;let rows=[];
  data.nominees.forEach(n=>{const ss=data.scores.filter(s=>s.nomineeId===n.id);if(!ss.length)return;
   const tot=ss.map(s=>s.total);
   rows.push({...n,avg:tot.reduce((a,b)=>a+b,0)/tot.length,count:ss.length,done:ss.length>=req,
@@ -325,7 +330,7 @@ window.updateAll=function(){
  $('maxScore').value=data.settings.max;$('judgeCount').value=data.settings.judges;
  $('qualify').value=data.settings.qualify??70;$('spread').value=data.settings.spread??15;$('judgeList').value=(data.judges||[]).join("\n");
 };
-data.judges=[];data.log=[];data.recusals=[];data.scores=[];data.nominees=[];   // start empty; server is the only source
+data.judges=[];data.log=[];data.recusals=[];data.scores=[];data.nominees=[];   // start empty; the sheet is the only source
 init();
 refresh().catch(()=>alert("Cannot reach the scoring sheet (check SHEET_URL). Nothing is stored on this device - check your connection."));
 setInterval(()=>{const a=document.querySelector('.page.active').id;if(a==='results'||a==='dashboard')refresh().catch(()=>{})},15000);
