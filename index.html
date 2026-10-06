@@ -23,6 +23,15 @@ table{width:100%;border-collapse:collapse}th,td{padding:11px;border-bottom:1px s
 .notice{padding:12px;border-left:4px solid var(--gold);background:#fff9e7;margin:12px 0}.empty{text-align:center;padding:30px;color:var(--muted)}
 @media(max-width:900px){.cards{grid-template-columns:repeat(2,1fr)}.grid{grid-template-columns:1fr}.criterion-row{grid-template-columns:1fr 100px 75px 42px}}
 @media(max-width:560px){header{position:static;align-items:flex-start;flex-direction:column}.cards{grid-template-columns:1fr}.hero h2{font-size:24px}main{padding:18px 3%}}
+@keyframes spin{to{transform:rotate(360deg)}}
+.muted{color:#68758a;font-size:13px}
+.tablewrap{overflow:auto;max-height:320px;margin-top:10px}
+
+/* A grid child keeps its min-content width by default, so one long college name in a
+   select pushed the whole Nominees page sideways on a phone. */
+.grid>*,.cards>*{min-width:0}
+.panel select,.panel input,.panel textarea{max-width:100%;box-sizing:border-box}
+.tablewrap table{min-width:420px}
 </style>
 </head>
 <body>
@@ -37,6 +46,7 @@ table{width:100%;border-collapse:collapse}th,td{padding:11px;border-bottom:1px s
     <button class="nav" data-page="scoring">Scoring</button>
     <button class="nav" data-page="results">Results</button>
     <button class="nav" data-page="settings">Settings</button>
+    <button class="nav" data-page="help">Help</button>
   </nav>
 </header>
 
@@ -61,7 +71,15 @@ table{width:100%;border-collapse:collapse}th,td{padding:11px;border-bottom:1px s
       <label>College / Institution</label><select id="nCollege"></select>
       <label>Award Category</label><select id="nCategory"></select>
       <label>Nomination ID</label><input id="nId" placeholder="e.g. TVET-001">
-      <div class="actions"><button class="btn green" onclick="addNominee()">Save Nominee</button></div>
+      <div class="actions"><button class="btn green" id="saveNomineeBtn" onclick="addNominee()">Save Nominee</button> <button class="btn" id="cancelEditNominee" onclick="cancelNomineeEdit()" style="display:none">Cancel edit</button></div>
+      <div id="nomineeFormNote" class="notice" style="display:none"></div>
+    </div>
+    <div class="panel"><h3>Import the whole list</h3>
+      <p class="muted">Download the template, fill in one nominee per row, then upload it. Nothing already on the register is overwritten and every skipped row is listed with the reason.</p>
+      <div class="actions"><button class="btn" onclick="downloadTemplate()">Download template (Excel)</button> <button class="btn" onclick="downloadTemplateCsv()">CSV instead</button></div>
+      <label for="importFile">Upload your filled-in file</label>
+      <input id="importFile" type="file" accept=".xlsx,.xls,.csv">
+      <div id="importReport"></div>
     </div>
     <div class="panel"><h3>Nominees</h3><div id="nomineeList"></div></div>
   </div>
@@ -74,6 +92,12 @@ table{width:100%;border-collapse:collapse}th,td{padding:11px;border-bottom:1px s
     <label>Select Nominee</label><select id="scoreNominee" onchange="loadScoreForm()"></select>
     <div id="scoreForm"></div>
   </div>
+  <div class="panel" id="myScoresPanel"><h3>Your scoring so far</h3><div id="myScores"></div></div>
+</section>
+
+<section id="help" class="page">
+  <div class="hero"><h2>NATIONAL TVET EXCELLENCE AWARDS 2026 &mdash; How to use this app</h2><p>Everything on one page. Judges need the first section only.</p></div>
+  <div id="helpBody"></div>
 </section>
 
 <section id="results" class="page">
@@ -141,8 +165,9 @@ function updateAll(){
 }
 function renderNominees(){
  const el=document.getElementById("nomineeList");if(!data.nominees.length){el.innerHTML='<div class="empty">No nominees added yet.</div>';return}
- el.innerHTML="<table><tr><th>ID</th><th>Nominee</th><th>College</th><th>Category</th><th></th></tr>"+data.nominees.map(n=>`<tr><td>${escHTML(n.id)}</td><td><b>${escHTML(n.name)}</b></td><td>${escHTML(n.college)}</td><td><span class="badge">${escHTML(categories[n.cat]?categories[n.cat][0]:"")}</span></td><td><button class="btn red" data-del="${escHTML(n.id)}">Delete</button></td></tr>`).join("")+"</table>";
+ el.innerHTML='<p class="muted">'+data.nominees.length+' on the register.</p><div class="tablewrap"><table><tr><th>ID</th><th>Nominee</th><th>College</th><th>Category</th><th></th></tr>'+data.nominees.map(n=>`<tr${String(n.id)===editingNominee?' style="background:#fdf6e3"':''}><td>${escHTML(n.id)}</td><td><b>${escHTML(n.name)}</b></td><td>${escHTML(n.college)}</td><td><span class="badge">${escHTML(categories[n.cat]?categories[n.cat][0]:"")}</span></td><td><button class="btn" data-edit="${escHTML(n.id)}">Edit</button> <button class="btn red" data-del="${escHTML(n.id)}">Delete</button></td></tr>`).join("")+"</table></div>";
  el.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>deleteNominee(b.dataset.del));
+ el.querySelectorAll("[data-edit]").forEach(b=>b.onclick=()=>editNominee(b.dataset.edit));
 }
 function deleteNominee(id){if(confirm("Delete this nominee and their scores?")){data.nominees=data.nominees.filter(n=>n.id!==id);data.scores=data.scores.filter(s=>s.nomineeId!==id);save()}}
 function renderScoreSelect(){let s=document.getElementById("scoreNominee");s.innerHTML='<option value="">-- Select nominee --</option>'+data.nominees.map(n=>`<option value="${escHTML(n.id)}">${escHTML(n.name)} \u2014 ${escHTML(categories[n.cat]?categories[n.cat][0]:"")}</option>`).join("")}
@@ -182,7 +207,7 @@ const parseR=(txt,crit)=>{const m={};String(txt||"").split("\n").forEach(l=>{con
 // ---------- Google Sheet API ----------
 // IMPORTANT: this must be the Web app URL of the deployment that runs the latest Code.gs
 // (https://script.google.com/macros/s/....../exec)
-const SHEET_URL="https://script.google.com/macros/s/AKfycbxrUnVuI_ON50dlRmZ8arFd6cV6bQuGGLC0KtTxMoFfucplIl1kCRe59gPQwP8YWxBhkw/exec";
+const SHEET_URL="https://script.google.com/macros/s/AKfycbw3_YA1GfTO2pqkUV6dPkyMkCwRDnCO9X4gst3ZCPulqdd0SqVvr_XEMgS8f36Tx25NZA/exec";
 let PIN=null;
 async function api(action,body={},admin){
  if(admin){PIN=PIN||prompt("Admin PIN:");if(!PIN)throw new Error("cancelled")}
@@ -191,28 +216,81 @@ async function api(action,body={},admin){
  if(j.error){if(/PIN/.test(j.error))PIN=null;throw new Error(j.error)}
  return j;
 }
+// A visible sign that the app is talking to the sheet. Without it, a slow
+// connection looks exactly like a page that has stopped working.
+function busy(text){
+ let el=document.getElementById('busyVeil');
+ if(text===false){if(el)el.remove();return}
+ if(!el){el=document.createElement('div');el.id='busyVeil';
+  el.style.cssText="position:fixed;inset:0;z-index:9999;display:grid;place-items:center;background:rgba(244,247,251,.75)";
+  document.body.appendChild(el)}
+ el.innerHTML='<div style="background:#fff;border-radius:14px;padding:22px 28px;box-shadow:0 10px 30px rgba(11,31,58,.18);text-align:center;max-width:320px">'+
+  '<div style="width:26px;height:26px;margin:0 auto 12px;border:3px solid #dfe6ef;border-top-color:#145da0;border-radius:50%;animation:spin .8s linear infinite"></div>'+
+  '<b>'+escHTML(text)+'</b><div style="color:#68758a;font-size:13px;margin-top:4px">This can take a few seconds.</div></div>';
+}
 const run=f=>async(...a)=>{try{return await f(...a)}catch(e){if(e.message!=="cancelled")alert(e.message)}};
 // Scoped read: admin PIN gets everything, a judge's name + code gets only that judge's own rows.
 async function refresh(){
  const j=sel.value,c=(($('judgeCode')||{}).value||"").trim();
- const r=await fetch(SHEET_URL,{method:"POST",body:JSON.stringify({action:"read",pin:PIN||undefined,judge:j||undefined,code:c||undefined})});
- const d=await r.json();if(d.error){if(/PIN/.test(d.error))PIN=null;throw new Error(d.error)}
- Object.assign(data,d);updateAll()}
+ busy("Checking the shared record...");
+ try{
+  const r=await fetch(SHEET_URL,{method:"POST",body:JSON.stringify({action:"read",pin:PIN||undefined,judge:j||undefined,code:c||undefined})});
+  const d=await r.json();if(d.error){if(/PIN/.test(d.error))PIN=null;throw new Error(d.error)}
+  Object.assign(data,d);updateAll()
+ } finally { busy(false) }}
 window.unlock=run(async()=>{PIN=prompt("Admin PIN:");if(!PIN)return;try{await refresh()}catch(e){PIN=null;throw e}});
 
 // ---------- judge dropdown ----------
-const jn=$('judgeName'),sel=document.createElement('select');sel.id='judgeName';sel.onchange=()=>refresh().then(()=>loadScoreForm()).catch(()=>{});jn.replaceWith(sel);
+const jn=$('judgeName'),sel=document.createElement('select');sel.id='judgeName';sel.onchange=()=>refreshKeepingWork();jn.replaceWith(sel);
 sel.insertAdjacentHTML('afterend','<label>Your personal code</label><input id="judgeCode" type="password" autocomplete="off" placeholder="Code given to you by the organisers">');
-$('judgeCode').onchange=()=>refresh().then(()=>loadScoreForm()).catch(()=>{});
+$('judgeCode').onchange=()=>refreshKeepingWork();
 function fillJudges(){const v=sel.value;sel.innerHTML='<option value="">-- Select judge --</option>'+data.judges.map(j=>`<option>${escHTML(j)}</option>`).join("");sel.value=v}
 
 // ---------- nominees ----------
+// renderNominees() lives in the original script above, outside this block, so this
+// has to be a genuine global rather than a let inside the closure.
+window.editingNominee=null;   // the id being edited, or null when adding
+
+window.editNominee=id=>{
+ const n=data.nominees.find(x=>String(x.id)===String(id));
+ if(!n)return alert("That nominee is no longer on the register.");
+ editingNominee=String(n.id);
+ $('nName').value=n.name;$('nCollege').value=n.college;$('nCategory').value=n.cat;$('nId').value=n.id;
+ $('nId').readOnly=true;
+ $('saveNomineeBtn').textContent="Update Nominee";
+ $('cancelEditNominee').style.display="";
+ const note=$('nomineeFormNote');
+ note.style.display="";note.innerHTML="<b>Editing "+escHTML(n.name)+"</b> ("+escHTML(n.id)+"). Saving changes this entry rather than adding a new one. Their scores are kept.";
+ $('nName').focus();$('nName').select();
+ window.scrollTo(0,0);
+};
+window.cancelNomineeEdit=()=>{
+ editingNominee=null;
+ $('nName').value="";$('nCollege').value="";$('nId').value="";$('nId').readOnly=false;
+ $('saveNomineeBtn').textContent="Save Nominee";
+ $('cancelEditNominee').style.display="none";
+ $('nomineeFormNote').style.display="none";
+ renderNominees();
+};
 window.addNominee=run(async()=>{
- const name=$('nName').value.trim(),college=$('nCollege').value,cat=+$('nCategory').value,
-  id=$('nId').value.trim()||"TVET-"+String(data.nominees.length+1).padStart(3,"0");
- if(!name||!college)return alert("Please enter the nominee name and select a college.");
- await api("nominee",{id,name,college,cat,catName:categories[cat][0]},true);
- $('nName').value="";$('nCollege').value="";$('nId').value="";await refresh();alert("Nominee added.");
+ const name=$('nName').value.trim(),college=$('nCollege').value,cat=+$('nCategory').value;
+ if(!name||!college)return alert("Please enter the nominee name and choose a college.");
+ const taken=new Set(data.nominees.map(x=>String(x.id)));
+ let id=$('nId').value.trim();
+ if(editingNominee){
+  id=editingNominee;
+ } else {
+  if(id&&taken.has(id))return alert("Nomination ID "+id+" is already used. Choose another or leave it blank.");
+  const clash=data.nominees.find(x=>loose(x.name)===loose(name)&&loose(x.college)===loose(college));
+  if(clash&&!confirm(name+" from "+college+" is already on the register as "+clash.id+". Add them again anyway?"))return;
+  if(!id)id=nextId(taken);
+ }
+ busy(editingNominee?"Updating the nominee...":"Adding the nominee...");
+ try{ await api("nominee",{id,name,college,cat,catName:categories[cat][0]},true); } finally { busy(false) }
+ const wasEdit=editingNominee;
+ cancelNomineeEdit();
+ await refresh();
+ alert(wasEdit?"Nominee updated.":"Nominee added.");
 });
 // Identify the nominee by id, not by row position.
 window.deleteNominee=run(async id=>{
@@ -221,6 +299,169 @@ window.deleteNominee=run(async id=>{
  if(!confirm("Delete "+n.name+" and their scores?"))return;
  await api("deleteNominee",{id},true);await refresh();
 });
+
+// ---------- bulk import ----------
+// One nominee per row. Added one at a time through the same "nominee" action the
+// form uses, so nothing changes on the Apps Script side.
+const TEMPLATE_HEADERS=["Nomination ID","Nominee name","College","Award category"];
+const norm=v=>String(v??"").replace(/\s+/g," ").trim();
+const loose=v=>norm(v).toLowerCase().replace(/\btvet college\b/,"").replace(/[^a-z0-9]/g,"");
+const matchCollege=v=>colleges.find(c=>loose(c)===loose(v))||null;
+const matchCategory=v=>{
+ const raw=norm(v);if(!raw)return -1;
+ const num=Number(raw);
+ if(Number.isInteger(num)&&num>=1&&num<=categories.length)return num-1;
+ const exact=categories.findIndex(c=>loose(c[0])===loose(raw));if(exact>=0)return exact;
+ return loose(raw).length>6?categories.findIndex(c=>loose(c[0]).includes(loose(raw))):-1;
+};
+// A fresh id that cannot collide, even after deletions.
+function nextId(taken){let i=1,id;do{id="TVET-"+String(i++).padStart(3,"0")}while(taken.has(id));return id}
+async function sheetJs(){
+ if(window.XLSX)return window.XLSX;
+ await new Promise((ok,bad)=>{const el=document.createElement("script");
+  el.src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+  el.onload=ok;el.onerror=()=>bad(new Error("The Excel library could not load. Use the CSV template, it needs no internet."));
+  document.head.appendChild(el)});
+ return window.XLSX;
+}
+const templateRows=()=>[TEMPLATE_HEADERS,["","Example: Sipho Radebe",colleges[0],categories[0][0]],["","","",""],["","","",""],["","","",""]];
+const csvCell=v=>{let t=String(v??"");if(/^[\s]*[=+@-]/.test(t))t="'"+t;return '"'+t.replaceAll('"','""')+'"'};
+window.downloadTemplateCsv=()=>{
+ const csv=templateRows().map(r=>r.map(csvCell).join(",")).join("\n");
+ const blob=new Blob(["﻿",csv],{type:"text/csv;charset=utf-8"}),a=document.createElement("a");
+ a.href=URL.createObjectURL(blob);a.download="TVET-nominees-template.csv";a.click();URL.revokeObjectURL(a.href);
+ alert("Template downloaded. One nominee per row. The example row is ignored when you upload.");
+};
+window.downloadTemplate=run(async()=>{
+ busy("Building the template...");
+ try{
+  const X=await sheetJs(),wb=X.utils.book_new(),sheet=X.utils.aoa_to_sheet(templateRows());
+  sheet["!cols"]=[{wch:16},{wch:34},{wch:40},{wch:46}];
+  X.utils.book_append_sheet(wb,sheet,"Nominees");
+  X.utils.book_append_sheet(wb,X.utils.aoa_to_sheet([["Award categories"],...categories.map((c,i)=>[(i+1)+". "+c[0]]),[""],["Colleges in the pilot"],...colleges.map(c=>[c])]),"Lists");
+  X.writeFile(wb,"TVET-nominees-template.xlsx");
+  alert("Template downloaded. The second sheet lists every category and college, so the wording can be copied exactly.");
+ } finally { busy(false) }
+});
+function parseCsv(text){
+ const rows=[];let cell="",row=[],q=false;
+ for(let i=0;i<text.length;i++){const ch=text[i];
+  if(q){if(ch==='"'){if(text[i+1]==='"'){cell+='"';i++}else q=false}else cell+=ch}
+  else if(ch==='"')q=true;
+  else if(ch===","){row.push(cell);cell=""}
+  else if(ch==="\n"){row.push(cell);rows.push(row);row=[];cell=""}
+  else if(ch!=="\r")cell+=ch}
+ if(cell!==""||row.length){row.push(cell);rows.push(row)}
+ return rows;
+}
+function readRows(file){
+ const isCsv=/\.csv$/i.test(file.name);
+ return new Promise((ok,bad)=>{
+  const r=new FileReader();
+  r.onerror=()=>bad(new Error("That file could not be read. Try saving it again."));
+  r.onload=async()=>{
+   try{
+    if(isCsv)return ok(parseCsv(String(r.result).replace(/^﻿/,"")));
+    const X=await sheetJs(),wb=X.read(new Uint8Array(r.result),{type:"array"});
+    ok(X.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,blankrows:false,raw:false}));
+   }catch(e){bad(e)}
+  };
+  if(isCsv)r.readAsText(file);else r.readAsArrayBuffer(file);
+ });
+}
+window.importNominees=run(async file=>{
+ const rows=await readRows(file);
+ if(!rows.length)throw new Error("That file has no rows in it.");
+ const head=(rows[0]||[]).map(h=>norm(h).toLowerCase());
+ const col=name=>head.findIndex(h=>h.startsWith(name));
+ const iId=col("nomination id"),iName=col("nominee"),iCollege=col("college"),iCat=col("award category");
+ if(iName<0||iCollege<0||iCat<0)throw new Error("That file does not look like the template. Download the template and fill that in.");
+ const added=[],skipped=[],queue=[];
+ const takenIds=new Set(data.nominees.map(n=>String(n.id)));
+ const takenPeople=new Set(data.nominees.map(n=>loose(n.name)+"|"+loose(n.college)));
+ for(let r=1;r<rows.length;r++){
+  const row=rows[r]||[],line=r+1;
+  const name=norm(row[iName]),collegeRaw=norm(row[iCollege]),catRaw=norm(row[iCat]);
+  let id=norm(row[iId]);
+  if(!name&&!collegeRaw&&!catRaw)continue;
+  if(/^example\b/i.test(name)){skipped.push({line,name,why:"The example row from the template"});continue}
+  if(!name){skipped.push({line,name:"(blank)",why:"No nominee name"});continue}
+  const college=matchCollege(collegeRaw);
+  if(!college){skipped.push({line,name,why:collegeRaw?"College not in the pilot list: "+collegeRaw:"No college given"});continue}
+  const cat=matchCategory(catRaw);
+  if(cat<0){skipped.push({line,name,why:catRaw?"Award category not recognised: "+catRaw:"No award category given"});continue}
+  const person=loose(name)+"|"+loose(college);
+  if(takenPeople.has(person)){skipped.push({line,name,why:"Already on the register"});continue}
+  if(id&&takenIds.has(id)){skipped.push({line,name,why:"Nomination ID "+id+" is already used"});continue}
+  if(!id)id=nextId(takenIds);
+  takenIds.add(id);takenPeople.add(person);
+  queue.push({line,id,name,college,cat});
+ }
+ const report=()=>{
+  $('importReport').innerHTML='<div class="notice" style="margin-top:14px"><b>'+added.length+" added</b> to the shared record"+
+   (skipped.length?", <b>"+skipped.length+" skipped</b>.</div>":".</div>")+
+   (skipped.length?'<div class="tablewrap"><table><tr><th>Row</th><th>Nominee</th><th>Why it was skipped</th></tr>'+
+    skipped.map(x=>"<tr><td>"+x.line+"</td><td>"+escHTML(x.name)+'</td><td style="color:#c0392b">'+escHTML(x.why)+"</td></tr>").join("")+"</table></div>":"");
+ };
+ if(!queue.length){report();throw new Error("Nothing in that file could be added. The reasons are listed below.")}
+ try{
+  for(let i=0;i<queue.length;i++){
+   const row=queue[i];
+   busy("Adding nominee "+(i+1)+" of "+queue.length+"...");
+   try{
+    await api("nominee",{id:row.id,name:row.name,college:row.college,cat:row.cat,catName:categories[row.cat][0]},true);
+    added.push(row);
+   }catch(e){
+    if(e.message==="cancelled")throw e;
+    skipped.push({line:row.line,name:row.name,why:"The shared record refused this row: "+e.message});
+   }
+  }
+ } finally { busy(false) }
+ await refresh();report();
+ alert(added.length+" nominee"+(added.length===1?"":"s")+" added"+(skipped.length?", "+skipped.length+" skipped. See the list on the page.":"."));
+});
+$('importFile').onchange=e=>{const f=e.target.files&&e.target.files[0];if(f){importNominees(f);e.target.value=""}};
+
+// A read that lands while a judge is part-way through a sheet must not wipe what
+// they have typed. Re-render the form only when nothing is in progress.
+function formInProgress(){
+ const el=$('scoreForm');if(!el)return false;
+ return [...el.querySelectorAll('input,textarea')].some(i=>i.id!=='judgeCode'&&String(i.value||'').trim()!=='');
+}
+function refreshKeepingWork(){
+ return refresh().then(()=>{if(!formInProgress())loadScoreForm();renderMyScores()}).catch(()=>{});
+}
+
+// ---------- what this judge has already done ----------
+// A judge can reopen anything they have submitted and change it. The reason for the
+// change is still required, and the old and new totals still go to the change log.
+function renderMyScores(){
+ const el=$('myScores');if(!el)return;
+ const j=sel.value;
+ if(!j){el.innerHTML='<div class="empty">Choose your name above to see your own scoring.</div>';return}
+ const mine=(data.scores||[]).filter(s=>s.judge===j);
+ const myRecusals=(data.recusals||[]).filter(r=>r.judge===j);
+ const done=new Set(mine.map(s=>String(s.nomineeId)));
+ const out=new Set(myRecusals.map(r=>String(r.nomineeId)));
+ const todo=(data.nominees||[]).filter(n=>!done.has(String(n.id))&&!out.has(String(n.id)));
+ el.innerHTML='<p class="muted">'+mine.length+' submitted &middot; '+myRecusals.length+' recused &middot; '+todo.length+' still to score.</p>'+
+  (mine.length?'<div class="tablewrap"><table><tr><th>Nominee</th><th>Category</th><th>Your score</th><th></th></tr>'+
+   mine.map(s=>{const n=(data.nominees||[]).find(x=>String(x.id)===String(s.nomineeId))||{};
+    return `<tr><td><b>${escHTML(n.name||s.nomineeId)}</b><br><small>${escHTML(n.college||"")}</small></td>`+
+     `<td>${escHTML(categories[n.cat]?categories[n.cat][0]:"")}</td>`+
+     `<td><b>${Number(s.total).toFixed(2)}%</b></td>`+
+     `<td><button class="btn" data-reopen="${escHTML(s.nomineeId)}">Open and change</button></td></tr>`}).join("")+
+   '</table></div>':'<div class="empty">You have not submitted any scores yet.</div>')+
+  (myRecusals.length?'<p class="muted" style="margin-top:12px">Recused from: '+myRecusals.map(r=>{
+    const n=(data.nominees||[]).find(x=>String(x.id)===String(r.nomineeId))||{};return escHTML(n.name||r.nomineeId)}).join(", ")+'</p>':'')+
+  (todo.length?'<p class="muted" style="margin-top:12px"><b>Still to score:</b> '+todo.map(n=>escHTML(n.name)).join(", ")+'</p>':
+    (mine.length?'<div class="notice" style="margin-top:12px"><b>That is everyone.</b> You have scored or recused yourself from every nominee on the register.</div>':''));
+ el.querySelectorAll("[data-reopen]").forEach(b=>b.onclick=()=>{
+  $('scoreNominee').value=b.dataset.reopen;
+  loadScoreForm();
+  $('scoreForm').scrollIntoView({behavior:"smooth",block:"center"});
+ });
+}
 
 // ---------- scoring form ----------
 window.loadScoreForm=function(){
@@ -241,8 +482,9 @@ function body(n,id,j,ex){
   el.innerHTML='<div class="notice">Recusal recorded. You cannot score this nominee.</div>';return}
  if(c!=="none"){el.innerHTML="";return}
  const lo=max<=10?1:0,rs=parseR(ex&&ex.comments,crit);
+ const reopened=ex?'<div class="notice" style="border-left-color:#8a6d1a;background:#fdf6e3"><b>You already scored '+escHTML(n.name)+' at '+Number(ex.total).toFixed(2)+'%.</b> Change what you need to and submit again. Your earlier scores are filled in below, and the change is recorded with your reason.</div>':"";
  const guide=max===5?'<div class="notice" style="margin-bottom:18px">'+SCALE.map(x=>"<b>"+x[0]+" "+x[1]+"</b> &middot; "+x[2]).join("<br>")+'</div>':"";
- el.innerHTML=guide+crit.map((x,i)=>{const [name,w]=x.split("|");return `<div class="criteria"><div class="criterion-row"><div><b>${escHTML(name)}</b><small style="display:block;color:#68758a">Weight: ${w}% | Score ${lo}-${max}${max<=10?" (whole numbers)":""}</small></div><input class="score-input" type="number" min="${lo}" max="${max}" step="${max<=10?1:"any"}" id="sc${i}" value="${ex?ex.values[i]:""}" placeholder="${lo}"><div>${w}%</div><div></div></div><input type="text" id="rs${i}" value="${esc(rs[i])}" placeholder="Written reason for this score (required)" style="margin-top:8px"></div>`}).join("")+
+ el.innerHTML=reopened+guide+crit.map((x,i)=>{const [name,w]=x.split("|");return `<div class="criteria"><div class="criterion-row"><div><b>${escHTML(name)}</b><small style="display:block;color:#68758a">Weight: ${w}% | Score ${lo}-${max}${max<=10?" (whole numbers)":""}</small></div><input class="score-input" type="number" min="${lo}" max="${max}" step="${max<=10?1:"any"}" id="sc${i}" value="${ex?ex.values[i]:""}" placeholder="${lo}"><div>${w}%</div><div></div></div><input type="text" id="rs${i}" value="${esc(rs[i])}" placeholder="Written reason for this score (required)" style="margin-top:8px"></div>`}).join("")+
  (ex?`<label>Reason for changing your earlier scores (required)</label><textarea id="changeWhy"></textarea>`:"")+
  `<div class="actions"><button class="btn green" onclick="submitScore('${escHTML(id)}')">${ex?"Update":"Submit"} Score</button></div><div id="liveTotal" class="total"></div>`;
  document.querySelectorAll(".score-input").forEach(i=>i.addEventListener("input",()=>live(n)));live(n);
@@ -264,7 +506,7 @@ window.submitScore=run(async id=>{
  if(old){const why=$('changeWhy').value.trim();if(!why)return alert("State the reason for changing your earlier score.");
   log={date:new Date().toISOString(),nomineeId:id,judge:j,oldTotal:+old.total.toFixed(2),newTotal:+total.toFixed(2),reason:why}}
  await api("score",{rec:{nomineeId:id,judge:j,values:vals,total,coi:"none",comments:com},log,code});
- await refresh();alert("Score saved to the shared record.");loadScoreForm();
+ await refresh();alert("Score saved to the shared record.");loadScoreForm();renderMyScores();
 });
 
 // ---------- results (administrator only) ----------
@@ -289,6 +531,122 @@ window.clearScores=run(async()=>{
  await api("clear",{},true);await refresh();
 });
 
+// ---------- judges ----------
+// Scores are filed under the judge's name, so a rename has to move every row that
+// judge has already submitted. Doing it by hand in the list below would orphan them.
+function renderJudgePanel(){
+ const el=$('judgePanel');if(!el)return;
+ const list=data.judges||[];
+ const sheets=j=>(data.scores||[]).filter(s=>s.judge===j).length;
+ el.innerHTML=(list.length?'<div class="tablewrap"><table><tr><th>Judge</th><th>Sheets in</th><th></th></tr>'+
+  list.map(j=>`<tr><td><b>${escHTML(j)}</b></td><td>${sheets(j)}</td><td><button class="btn" data-rename="${escHTML(j)}">Rename</button> <button class="btn red" data-dropj="${escHTML(j)}">Remove</button></td></tr>`).join("")+
+  '</table></div>':'<div class="empty">No judges yet. Add the first one below.</div>')+
+  '<div class="actions" style="margin-top:12px"><input id="newJudge" placeholder="Name of the judge to add" style="max-width:280px"> <button class="btn green" id="addJudgeBtn">Add judge</button></div>';
+ el.querySelectorAll("[data-rename]").forEach(b=>b.onclick=()=>renameJudge(b.dataset.rename));
+ el.querySelectorAll("[data-dropj]").forEach(b=>b.onclick=()=>removeJudge(b.dataset.dropj));
+ const add=$('addJudgeBtn');if(add)add.onclick=()=>addJudge();
+}
+async function saveJudgeList(list,label){
+ busy(label||"Saving the judge list...");
+ try{
+  await api("settings",{max:data.settings.max,judges:data.settings.judges,qualify:data.settings.qualify??70,
+   spread:data.settings.spread??15,judgeList:list,newPin:""},true);
+ } finally { busy(false) }
+ await refresh();
+}
+window.addJudge=run(async()=>{
+ const name=norm(($('newJudge')||{}).value);
+ if(!name)return alert("Type the judge's name first.");
+ if((data.judges||[]).some(j=>loose(j)===loose(name)))return alert(name+" is already on the panel.");
+ await saveJudgeList([...(data.judges||[]),name],"Adding the judge...");
+ alert(name+" added. Give them their personal code separately, it is set in the sheet.");
+});
+window.renameJudge=run(async old=>{
+ // Scores are filed under the judge's name and the sheet has no way to delete or
+ // re-key a submitted row: writing it under a new name leaves the old one behind,
+ // and the nominee is then counted twice. So a rename is only safe before they score.
+ const mine=(data.scores||[]).filter(s=>s.judge===old).length;
+ if(mine) return alert(old+" has already submitted "+mine+" sheet"+(mine===1?"":"s")+".\n\nRenaming them now would leave "+(mine===1?"that sheet":"those sheets")+" filed under the old name and count the nominee twice. Correct the spelling in the Google Sheet itself, where the scores can be re-filed at the same time.");
+ const name=norm(prompt("New name for "+old+":",old)||"");
+ if(!name||name===old)return;
+ if((data.judges||[]).some(j=>loose(j)===loose(name)&&j!==old))return alert(name+" is already on the panel.");
+ await saveJudgeList((data.judges||[]).map(j=>j===old?name:j),"Renaming the judge...");
+ alert(name+" renamed. Give them their personal code if it has changed.");
+});
+window.removeJudge=run(async name=>{
+ const mine=(data.scores||[]).filter(s=>s.judge===name).length;
+ if(mine)return alert(name+" has "+mine+" submitted sheet"+(mine===1?"":"s")+". Removing them would leave "+(mine===1?"it":"them")+" filed under a judge who is no longer on the panel. Rename them instead, or clear their scores first.");
+ if(!confirm("Remove "+name+" from the panel?"))return;
+ await saveJudgeList((data.judges||[]).filter(j=>j!==name),"Removing the judge...");
+ alert(name+" removed.");
+});
+
+// ---------- the manual, built in ----------
+function renderHelp(){
+ const el=$('helpBody');if(!el)return;
+ const crit=CRITERIA.map(c=>{const [n,w]=c.split("|");return "<tr><td>"+escHTML(n)+"</td><td><b>"+w+"%</b></td></tr>"}).join("");
+ const cats=categories.map((c,i)=>"<tr><td>"+(i+1)+"</td><td>"+escHTML(c[0])+"</td></tr>").join("");
+ const scale=SCALE.map(x=>"<tr><td><b>"+x[0]+"</b></td><td><b>"+escHTML(x[1])+"</b></td><td>"+escHTML(x[2])+"</td></tr>").join("");
+ const bands=BANDS.map(b=>"<tr><td><b>"+(b[0]?b[0]+" and above":"below 70")+"</b></td><td>"+escHTML(b[1])+"</td></tr>").join("");
+ el.innerHTML=`
+ <div class="grid">
+  <div class="panel"><h3>For judges</h3>
+   <p>Everything you do is saved to one shared record. Nothing is kept on the computer you are using, so you can start on one machine and finish on another.</p>
+   <ol>
+    <li><b>Go to Scoring.</b> Choose your name, then type the personal code the organisers gave you. The page loads your own work only; you never see another judge's scores.</li>
+    <li><b>Choose a nominee</b> from the list.</li>
+    <li><b>Declare the conflict of interest.</b> If you know the nominee well enough that it could affect your judgement, choose to recuse yourself. That is recorded and you are not asked to score them.</li>
+    <li><b>Score each of the six criteria from 1 to 5</b> and write a short reason for every one. The reason is required. The app applies the weights and shows your running total.</li>
+    <li><b>Submit.</b> The score only counts once the shared record confirms it.</li>
+   </ol>
+   <p><b>Changing a score you already submitted.</b> Your scoring so far is listed at the bottom of the Scoring page. Press <b>Open and change</b> next to any nominee, adjust what you need, give a reason for the change, and submit again. The old total, the new total and your reason are all kept in the record.</p>
+   <div class="notice"><b>Keep the window open while you work.</b> A half-finished sheet is not saved anywhere until you press Submit.</div>
+  </div>
+  <div class="panel"><h3>For organisers</h3>
+   <p>The administrator PIN unlocks the Results page and everything that writes to the register. You are asked for it the first time you need it.</p>
+   <p><b>Adding nominees.</b> Either one at a time on the Nominees page, or all at once with the upload described below. Leave the Nomination ID blank and the app gives out the next free one.</p>
+   <p><b>Fixing a nominee.</b> Press <b>Edit</b> on their row. The form fills in with their details and saving updates that entry rather than creating a second one. Their scores are kept.</p>
+   <p><b>Judges.</b> Settings page. Add a judge, correct a name, or remove one. A judge who has already submitted sheets cannot be renamed or removed here: their scores are filed under the name they used, and changing it in the app would leave those scores behind and count the nominee twice. Fix a name like that in the Google Sheet itself, where the scores can be re-filed at the same time. Personal codes are also set in the sheet, not here.</p>
+   <p><b>Results.</b> A recognition band is only shown once the required number of judges have scored that nominee. Where the panel disagrees by more than the threshold, the row is flagged so you can discuss it before anything is announced.</p>
+   <div class="notice" style="border-left-color:#c0392b"><b>Do not change the maximum score per criterion once judging has started.</b> Every total already captured was worked out against it, so changing it re-bases scores that are already in.</div>
+  </div>
+ </div>
+ <div class="grid">
+  <div class="panel"><h3>Uploading the whole list</h3>
+   <p>Nominees page, right-hand panel.</p>
+   <ol>
+    <li>Press <b>Download template</b>. Excel needs an internet connection the first time; the <b>CSV instead</b> button needs none and opens in Excel the same way.</li>
+    <li>Fill in one nominee per row. The second sheet of the Excel template lists every category and every college so the wording can be copied exactly.</li>
+    <li>Leave the Nomination ID blank unless you have your own numbering.</li>
+    <li>Upload the file. Rows go in one at a time with a counter on screen.</li>
+   </ol>
+   <p>The award category can be the full name or just its number. A college can be typed without the words "TVET College", and capitals and extra spaces do not matter.</p>
+   <p><b>Nothing already on the register is overwritten.</b> A row is skipped, and listed with its row number and the reason, when it is the example row, has no name, college or category, names a college or category the app does not recognise, repeats somebody already on the register, or uses a Nomination ID that is taken.</p>
+  </div>
+  <div class="panel"><h3>If something looks wrong</h3>
+   <p><b>The page seems frozen.</b> A panel saying it is talking to the shared record means a request is in flight. Google can take a few seconds to wake up. Wait for it to clear.</p>
+   <p><b>The judge list is empty.</b> The app could not read the shared record. Check the connection and reload.</p>
+   <p><b>A score will not submit.</b> Every criterion needs a score and a written reason of at least a few words, and your personal code must be filled in.</p>
+   <p><b>A nominee is missing.</b> Press Refresh, or check the Nominees page; another organiser may still be loading them.</p>
+   <p>Scores and nominees live in the shared Google Sheet. If this page is closed, nothing submitted is lost.</p>
+  </div>
+ </div>
+ <div class="grid">
+  <div class="panel"><h3>The framework</h3>
+   <p>One set of six criteria for every category.</p>
+   <table><tr><th>Criterion</th><th>Weight</th></tr>${crit}</table>
+   <p style="margin-top:16px">Each is scored 1 to 5, so straight 3s come to 60, straight 4s to 80 and straight 5s to 100.</p>
+   <table style="margin-top:10px"><tr><th>Score</th><th></th><th>What it means</th></tr>${scale}</table>
+   <p style="margin-top:16px"><b>Recognition bands</b>, applied to the panel average.</p>
+   <table style="margin-top:10px">${bands}</table>
+  </div>
+  <div class="panel"><h3>The award categories</h3>
+   <table><tr><th>#</th><th>Category</th></tr>${cats}</table>
+   <p class="muted" style="margin-top:14px">Use either the number or the full name in the upload template.</p>
+  </div>
+ </div>`;
+}
+
 // ---------- settings ----------
 window.saveSettings=run(async()=>{
  const np=$('newPin').value.trim();
@@ -296,8 +654,12 @@ window.saveSettings=run(async()=>{
   spread:$('spread').value,judgeList:$('judgeList').value.split("\n"),newPin:np},true);
  if(np)PIN=np;$('newPin').value="";await refresh();alert("Settings saved.");
 });
-$('settings').insertAdjacentHTML('beforeend',`<div class="panel"><h3>Judges, thresholds &amp; admin PIN</h3>
- <label>Judge list (one name per line)</label><textarea id="judgeList" style="min-height:120px"></textarea>
+$('settings').insertAdjacentHTML('beforeend',`<div class="panel"><h3>Judges on the panel</h3>
+ <p class="muted">These are the names judges choose from on the Scoring page. A judge who is not on this list cannot score.</p>
+ <div id="judgePanel"></div>
+ <label for="judgeList">Judge list (one name per line)</label><textarea id="judgeList" style="min-height:120px"></textarea>
+ <div class="notice" style="border-left-color:#c0392b"><b>Do not rename a judge by editing this box.</b> Scores are filed under the name used when they were submitted, so a name changed here leaves them behind. Use the Rename button above, which refuses the change if it would strand anything.</div>
+ <h3 style="margin-top:26px">Thresholds &amp; admin PIN</h3>
  <label>Qualifying line (% of 100)</label><input id="qualify" type="number" min="0" max="100">
  <label>Flag a nominee when the judges are this many points apart</label><input id="spread" type="number" min="1" max="60">
  <label>New admin PIN (leave blank to keep)</label><input id="newPin" type="password">
@@ -329,11 +691,20 @@ window.updateAll=function(){
  $('scoring').querySelector('.hero p').textContent="Score each criterion from "+lw+" to "+mx+(mx<=10?" (whole numbers)":"")+" and give a written reason for every score. The app applies the weights automatically.";
  $('maxScore').value=data.settings.max;$('judgeCount').value=data.settings.judges;
  $('qualify').value=data.settings.qualify??70;$('spread').value=data.settings.spread??15;$('judgeList').value=(data.judges||[]).join("\n");
+ renderJudgePanel();renderMyScores();renderHelp();
 };
 data.judges=[];data.log=[];data.recusals=[];data.scores=[];data.nominees=[];   // start empty; the sheet is the only source
 init();
 refresh().catch(()=>alert("Cannot reach the scoring sheet (check SHEET_URL). Nothing is stored on this device - check your connection."));
-setInterval(()=>{const a=document.querySelector('.page.active').id;if(a==='results'||a==='dashboard')refresh().catch(()=>{})},15000);
+// Refresh the live pages on a timer, but never while something else is talking to
+// the sheet, and never while someone is typing into a field.
+setInterval(()=>{
+ if(document.getElementById('busyVeil'))return;
+ const t=document.activeElement&&document.activeElement.tagName;
+ if(t==='INPUT'||t==='TEXTAREA'||t==='SELECT')return;
+ const a=document.querySelector('.page.active').id;
+ if(a==='results'||a==='dashboard')refresh().catch(()=>{});
+},15000);
 })();
 </script>
 </body>
