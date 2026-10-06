@@ -120,6 +120,8 @@ table{width:100%;border-collapse:collapse}th,td{padding:11px;border-bottom:1px s
 </main>
 
 <script>
+var editingNominee=null; // FIX A: defined before init() runs, so old localStorage data cannot crash the page
+
 // Nominee and college names come from a shared Google Sheet that several people can
 // edit. Anything from the sheet is escaped before it is written into the page, so a
 // stray angle bracket in a name stays text and cannot run as code.
@@ -247,8 +249,8 @@ $('judgeCode').onchange=()=>refreshKeepingWork();
 function fillJudges(){const v=sel.value;sel.innerHTML='<option value="">-- Select judge --</option>'+data.judges.map(j=>`<option>${escHTML(j)}</option>`).join("");sel.value=v}
 
 // ---------- nominees ----------
-// renderNominees() lives in the original script above, outside this block, so this
-// has to be a genuine global rather than a let inside the closure.
+// renderNominees() lives in the original script above, outside this block, so
+// editingNominee is declared with var at the very top of the script.
 window.editingNominee=null;   // the id being edited, or null when adding
 
 window.editNominee=id=>{
@@ -328,7 +330,7 @@ const templateRows=()=>[TEMPLATE_HEADERS,["","Example: Sipho Radebe",colleges[0]
 const csvCell=v=>{let t=String(v??"");if(/^[\s]*[=+@-]/.test(t))t="'"+t;return '"'+t.replaceAll('"','""')+'"'};
 window.downloadTemplateCsv=()=>{
  const csv=templateRows().map(r=>r.map(csvCell).join(",")).join("\n");
- const blob=new Blob(["﻿",csv],{type:"text/csv;charset=utf-8"}),a=document.createElement("a");
+ const blob=new Blob(["\uFEFF",csv],{type:"text/csv;charset=utf-8"}),a=document.createElement("a");
  a.href=URL.createObjectURL(blob);a.download="TVET-nominees-template.csv";a.click();URL.revokeObjectURL(a.href);
  alert("Template downloaded. One nominee per row. The example row is ignored when you upload.");
 };
@@ -343,12 +345,13 @@ window.downloadTemplate=run(async()=>{
   alert("Template downloaded. The second sheet lists every category and college, so the wording can be copied exactly.");
  } finally { busy(false) }
 });
-function parseCsv(text){
+// FIX B: the delimiter is passed in, so semicolon CSVs from South African Excel work.
+function parseCsv(text,d){
  const rows=[];let cell="",row=[],q=false;
  for(let i=0;i<text.length;i++){const ch=text[i];
   if(q){if(ch==='"'){if(text[i+1]==='"'){cell+='"';i++}else q=false}else cell+=ch}
   else if(ch==='"')q=true;
-  else if(ch===","){row.push(cell);cell=""}
+  else if(ch===d){row.push(cell);cell=""}
   else if(ch==="\n"){row.push(cell);rows.push(row);row=[];cell=""}
   else if(ch!=="\r")cell+=ch}
  if(cell!==""||row.length){row.push(cell);rows.push(row)}
@@ -361,7 +364,12 @@ function readRows(file){
   r.onerror=()=>bad(new Error("That file could not be read. Try saving it again."));
   r.onload=async()=>{
    try{
-    if(isCsv)return ok(parseCsv(String(r.result).replace(/^﻿/,"")));
+    if(isCsv){
+     const clean=String(r.result).replace(/^\uFEFF/,"");
+     const first=clean.split(/\r?\n/,1)[0];
+     const d=first.split(";").length>first.split(",").length?";":",";
+     return ok(parseCsv(clean,d));
+    }
     const X=await sheetJs(),wb=X.read(new Uint8Array(r.result),{type:"array"});
     ok(X.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,blankrows:false,raw:false}));
    }catch(e){bad(e)}
@@ -404,7 +412,9 @@ window.importNominees=run(async file=>{
     skipped.map(x=>"<tr><td>"+x.line+"</td><td>"+escHTML(x.name)+'</td><td style="color:#c0392b">'+escHTML(x.why)+"</td></tr>").join("")+"</table></div>":"");
  };
  if(!queue.length){report();throw new Error("Nothing in that file could be added. The reasons are listed below.")}
+ // FIX C: check the admin PIN once before the loop, and stop on a PIN error.
  try{
+  await api("verify",{},true);
   for(let i=0;i<queue.length;i++){
    const row=queue[i];
    busy("Adding nominee "+(i+1)+" of "+queue.length+"...");
@@ -412,7 +422,7 @@ window.importNominees=run(async file=>{
     await api("nominee",{id:row.id,name:row.name,college:row.college,cat:row.cat,catName:categories[row.cat][0]},true);
     added.push(row);
    }catch(e){
-    if(e.message==="cancelled")throw e;
+    if(e.message==="cancelled"||/PIN/i.test(e.message))throw e;
     skipped.push({line:row.line,name:row.name,why:"The shared record refused this row: "+e.message});
    }
   }
@@ -486,7 +496,8 @@ function body(n,id,j,ex){
  const guide=max===5?'<div class="notice" style="margin-bottom:18px">'+SCALE.map(x=>"<b>"+x[0]+" "+x[1]+"</b> &middot; "+x[2]).join("<br>")+'</div>':"";
  el.innerHTML=reopened+guide+crit.map((x,i)=>{const [name,w]=x.split("|");return `<div class="criteria"><div class="criterion-row"><div><b>${escHTML(name)}</b><small style="display:block;color:#68758a">Weight: ${w}% | Score ${lo}-${max}${max<=10?" (whole numbers)":""}</small></div><input class="score-input" type="number" min="${lo}" max="${max}" step="${max<=10?1:"any"}" id="sc${i}" value="${ex?ex.values[i]:""}" placeholder="${lo}"><div>${w}%</div><div></div></div><input type="text" id="rs${i}" value="${esc(rs[i])}" placeholder="Written reason for this score (required)" style="margin-top:8px"></div>`}).join("")+
  (ex?`<label>Reason for changing your earlier scores (required)</label><textarea id="changeWhy"></textarea>`:"")+
- `<div class="actions"><button class="btn green" onclick="submitScore('${escHTML(id)}')">${ex?"Update":"Submit"} Score</button></div><div id="liveTotal" class="total"></div>`;
+ // FIX D: the id travels in a data attribute, so an apostrophe in an ID cannot break the handler.
+ `<div class="actions"><button class="btn green" data-id="${escHTML(id)}" onclick="submitScore(this.dataset.id)">${ex?"Update":"Submit"} Score</button></div><div id="liveTotal" class="total"></div>`;
  document.querySelectorAll(".score-input").forEach(i=>i.addEventListener("input",()=>live(n)));live(n);
 }
 function live(n){const crit=categories[n.cat][1],vals=crit.map((_,i)=>+($('sc'+i)?.value||0));$('liveTotal').textContent="Current weighted score: "+pct(vals,crit,data.settings.max).toFixed(2)+"%"}
