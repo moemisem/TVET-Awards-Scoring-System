@@ -120,8 +120,6 @@ table{width:100%;border-collapse:collapse}th,td{padding:11px;border-bottom:1px s
 </main>
 
 <script>
-var editingNominee=null; // FIX A: defined before init() runs, so old localStorage data cannot crash the page
-
 // Nominee and college names come from a shared Google Sheet that several people can
 // edit. Anything from the sheet is escaped before it is written into the page, so a
 // stray angle bracket in a name stays text and cannot run as code.
@@ -209,7 +207,7 @@ const parseR=(txt,crit)=>{const m={};String(txt||"").split("\n").forEach(l=>{con
 // ---------- Google Sheet API ----------
 // IMPORTANT: this must be the Web app URL of the deployment that runs the latest Code.gs
 // (https://script.google.com/macros/s/....../exec)
-const SHEET_URL="https://script.google.com/macros/s/AKfycbw3_YA1GfTO2pqkUV6dPkyMkCwRDnCO9X4gst3ZCPulqdd0SqVvr_XEMgS8f36Tx25NZA/exec";
+const SHEET_URL="https://script.google.com/macros/s/AKfycbxrUnVuI_ON50dlRmZ8arFd6cV6bQuGGLC0KtTxMoFfucplIl1kCRe59gPQwP8YWxBhkw/exec";
 let PIN=null;
 async function api(action,body={},admin){
  if(admin){PIN=PIN||prompt("Admin PIN:");if(!PIN)throw new Error("cancelled")}
@@ -233,24 +231,51 @@ function busy(text){
 const run=f=>async(...a)=>{try{return await f(...a)}catch(e){if(e.message!=="cancelled")alert(e.message)}};
 // Scoped read: admin PIN gets everything, a judge's name + code gets only that judge's own rows.
 async function refresh(){
- const j=sel.value,c=(($('judgeCode')||{}).value||"").trim();
+ const j=sel.value.trim(),c=(($('judgeCode')||{}).value||"").trim();
  busy("Checking the shared record...");
  try{
-  const r=await fetch(SHEET_URL,{method:"POST",body:JSON.stringify({action:"read",pin:PIN||undefined,judge:j||undefined,code:c||undefined})});
+  const r=await fetch(SHEET_URL,{method:"POST",body:JSON.stringify({action:"read",pin:PIN||undefined,judge:(j&&c)?j:undefined,code:(j&&c)?c:undefined})});
   const d=await r.json();if(d.error){if(/PIN/.test(d.error))PIN=null;throw new Error(d.error)}
-  Object.assign(data,d);updateAll()
+  data.me=undefined;Object.assign(data,d);updateAll()
  } finally { busy(false) }}
 window.unlock=run(async()=>{PIN=prompt("Admin PIN:");if(!PIN)return;try{await refresh()}catch(e){PIN=null;throw e}});
 
-// ---------- judge dropdown ----------
-const jn=$('judgeName'),sel=document.createElement('select');sel.id='judgeName';sel.onchange=()=>refreshKeepingWork();jn.replaceWith(sel);
-sel.insertAdjacentHTML('afterend','<label>Your personal code</label><input id="judgeCode" type="password" autocomplete="off" placeholder="Code given to you by the organisers">');
-$('judgeCode').onchange=()=>refreshKeepingWork();
-function fillJudges(){const v=sel.value;sel.innerHTML='<option value="">-- Select judge --</option>'+data.judges.map(j=>`<option>${escHTML(j)}</option>`).join("");sel.value=v}
+// ---------- judge sign-in ----------
+// The roster and the panel are private: the sheet returns nominees only for a valid
+// judge name + code (or the admin PIN), so there is no dropdown of names to choose from.
+const sel=$('judgeName');sel.placeholder="Your name, as the organisers listed it";sel.autocomplete="off";
+sel.insertAdjacentHTML('afterend','<label>Your personal code</label><input id="judgeCode" type="password" autocomplete="off" placeholder="Code given to you by the organisers">'+
+ '<div class="actions" style="margin-top:10px"><button class="btn green" id="judgeSignIn">Sign in</button></div><div id="loginMsg" class="muted" style="margin-top:8px">Type your name and code, then press Sign in to load the nominees.</div>');
+function loginMsg(t,bad){const e=$('loginMsg');e.textContent=t;e.style.color=bad?"#c0392b":""}
+window.judgeSignIn=async()=>{
+ const j=sel.value.trim(),c=$('judgeCode').value.trim();
+ if(!j||!c)return loginMsg("Enter both your name and your personal code.",true);
+ try{await refresh();if(!data.me)throw new Error("Name or code not recognised.");
+  sel.value=data.me;loginMsg("Signed in as "+data.me+".");if(!formInProgress())loadScoreForm();renderMyScores()}
+ catch(e){data.me=undefined;loginMsg(e.message,true)}
+};
+$('judgeSignIn').onclick=judgeSignIn;
+$('judgeCode').onkeydown=e=>{if(e.key==="Enter")judgeSignIn()};
+function fillJudges(){}   // judge names are never listed to the public
+
+// ---------- admin guard ----------
+// The roster and judge list only exist in the page after the PIN is accepted. Anything that
+// compares against them (duplicates, the judge list, settings) must load them first, or it would
+// be working from an empty list and could overwrite the real one.
+async function needAdmin(){
+ if(PIN&&(data.judges||[]).length+(data.nominees||[]).length>0)return;
+ if(!PIN){const p=prompt("Admin PIN:");if(!p)throw new Error("cancelled");PIN=p}
+ try{await refresh()}catch(e){PIN=null;throw e}
+}
+const oldRenderNominees=window.renderNominees;
+window.renderNominees=function(){
+ if(!PIN&&!data.me){$('nomineeList').innerHTML='<div class="empty">The register is private. Enter the admin PIN to see it.<br><br><button class="btn gold" onclick="unlock()">Unlock (admin)</button></div>';return}
+ oldRenderNominees();
+};
 
 // ---------- nominees ----------
-// renderNominees() lives in the original script above, outside this block, so
-// editingNominee is declared with var at the very top of the script.
+// renderNominees() lives in the original script above, outside this block, so this
+// has to be a genuine global rather than a let inside the closure.
 window.editingNominee=null;   // the id being edited, or null when adding
 
 window.editNominee=id=>{
@@ -330,7 +355,7 @@ const templateRows=()=>[TEMPLATE_HEADERS,["","Example: Sipho Radebe",colleges[0]
 const csvCell=v=>{let t=String(v??"");if(/^[\s]*[=+@-]/.test(t))t="'"+t;return '"'+t.replaceAll('"','""')+'"'};
 window.downloadTemplateCsv=()=>{
  const csv=templateRows().map(r=>r.map(csvCell).join(",")).join("\n");
- const blob=new Blob(["\uFEFF",csv],{type:"text/csv;charset=utf-8"}),a=document.createElement("a");
+ const blob=new Blob(["﻿",csv],{type:"text/csv;charset=utf-8"}),a=document.createElement("a");
  a.href=URL.createObjectURL(blob);a.download="TVET-nominees-template.csv";a.click();URL.revokeObjectURL(a.href);
  alert("Template downloaded. One nominee per row. The example row is ignored when you upload.");
 };
@@ -345,13 +370,12 @@ window.downloadTemplate=run(async()=>{
   alert("Template downloaded. The second sheet lists every category and college, so the wording can be copied exactly.");
  } finally { busy(false) }
 });
-// FIX B: the delimiter is passed in, so semicolon CSVs from South African Excel work.
-function parseCsv(text,d){
+function parseCsv(text){
  const rows=[];let cell="",row=[],q=false;
  for(let i=0;i<text.length;i++){const ch=text[i];
   if(q){if(ch==='"'){if(text[i+1]==='"'){cell+='"';i++}else q=false}else cell+=ch}
   else if(ch==='"')q=true;
-  else if(ch===d){row.push(cell);cell=""}
+  else if(ch===","){row.push(cell);cell=""}
   else if(ch==="\n"){row.push(cell);rows.push(row);row=[];cell=""}
   else if(ch!=="\r")cell+=ch}
  if(cell!==""||row.length){row.push(cell);rows.push(row)}
@@ -364,12 +388,7 @@ function readRows(file){
   r.onerror=()=>bad(new Error("That file could not be read. Try saving it again."));
   r.onload=async()=>{
    try{
-    if(isCsv){
-     const clean=String(r.result).replace(/^\uFEFF/,"");
-     const first=clean.split(/\r?\n/,1)[0];
-     const d=first.split(";").length>first.split(",").length?";":",";
-     return ok(parseCsv(clean,d));
-    }
+    if(isCsv)return ok(parseCsv(String(r.result).replace(/^﻿/,"")));
     const X=await sheetJs(),wb=X.read(new Uint8Array(r.result),{type:"array"});
     ok(X.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,blankrows:false,raw:false}));
    }catch(e){bad(e)}
@@ -412,9 +431,7 @@ window.importNominees=run(async file=>{
     skipped.map(x=>"<tr><td>"+x.line+"</td><td>"+escHTML(x.name)+'</td><td style="color:#c0392b">'+escHTML(x.why)+"</td></tr>").join("")+"</table></div>":"");
  };
  if(!queue.length){report();throw new Error("Nothing in that file could be added. The reasons are listed below.")}
- // FIX C: check the admin PIN once before the loop, and stop on a PIN error.
  try{
-  await api("verify",{},true);
   for(let i=0;i<queue.length;i++){
    const row=queue[i];
    busy("Adding nominee "+(i+1)+" of "+queue.length+"...");
@@ -422,7 +439,7 @@ window.importNominees=run(async file=>{
     await api("nominee",{id:row.id,name:row.name,college:row.college,cat:row.cat,catName:categories[row.cat][0]},true);
     added.push(row);
    }catch(e){
-    if(e.message==="cancelled"||/PIN/i.test(e.message))throw e;
+    if(e.message==="cancelled")throw e;
     skipped.push({line:row.line,name:row.name,why:"The shared record refused this row: "+e.message});
    }
   }
@@ -447,8 +464,8 @@ function refreshKeepingWork(){
 // change is still required, and the old and new totals still go to the change log.
 function renderMyScores(){
  const el=$('myScores');if(!el)return;
- const j=sel.value;
- if(!j){el.innerHTML='<div class="empty">Choose your name above to see your own scoring.</div>';return}
+ const j=data.me||"";
+ if(!j){el.innerHTML='<div class="empty">Sign in above to see your own scoring.</div>';return}
  const mine=(data.scores||[]).filter(s=>s.judge===j);
  const myRecusals=(data.recusals||[]).filter(r=>r.judge===j);
  const done=new Set(mine.map(s=>String(s.nomineeId)));
@@ -475,9 +492,9 @@ function renderMyScores(){
 
 // ---------- scoring form ----------
 window.loadScoreForm=function(){
- const id=$('scoreNominee').value,n=data.nominees.find(x=>x.id===id),el=$('scoreForm'),j=sel.value;
+ const id=$('scoreNominee').value,n=data.nominees.find(x=>x.id===id),el=$('scoreForm'),j=data.me||"";
  if(!n){el.innerHTML="";return}
- if(!j){el.innerHTML='<div class="notice">Select your name first.</div>';return}
+ if(!j){el.innerHTML='<div class="notice">Sign in with your name and code first.</div>';return}
  const ex=data.scores.find(s=>s.nomineeId===id&&s.judge===j);
  el.innerHTML=`<h3 style="margin-top:25px">${escHTML(categories[n.cat][0])}</h3><label>Conflict of interest</label>
  <select id="coi"><option value="">-- Declare --</option><option value="none">I have NO conflict of interest with this nominee</option><option value="conflict">I HAVE a conflict - I recuse myself</option></select><div id="coiBody"></div>`;
@@ -496,14 +513,13 @@ function body(n,id,j,ex){
  const guide=max===5?'<div class="notice" style="margin-bottom:18px">'+SCALE.map(x=>"<b>"+x[0]+" "+x[1]+"</b> &middot; "+x[2]).join("<br>")+'</div>':"";
  el.innerHTML=reopened+guide+crit.map((x,i)=>{const [name,w]=x.split("|");return `<div class="criteria"><div class="criterion-row"><div><b>${escHTML(name)}</b><small style="display:block;color:#68758a">Weight: ${w}% | Score ${lo}-${max}${max<=10?" (whole numbers)":""}</small></div><input class="score-input" type="number" min="${lo}" max="${max}" step="${max<=10?1:"any"}" id="sc${i}" value="${ex?ex.values[i]:""}" placeholder="${lo}"><div>${w}%</div><div></div></div><input type="text" id="rs${i}" value="${esc(rs[i])}" placeholder="Written reason for this score (required)" style="margin-top:8px"></div>`}).join("")+
  (ex?`<label>Reason for changing your earlier scores (required)</label><textarea id="changeWhy"></textarea>`:"")+
- // FIX D: the id travels in a data attribute, so an apostrophe in an ID cannot break the handler.
- `<div class="actions"><button class="btn green" data-id="${escHTML(id)}" onclick="submitScore(this.dataset.id)">${ex?"Update":"Submit"} Score</button></div><div id="liveTotal" class="total"></div>`;
+ `<div class="actions"><button class="btn green" onclick="submitScore('${escHTML(id)}')">${ex?"Update":"Submit"} Score</button></div><div id="liveTotal" class="total"></div>`;
  document.querySelectorAll(".score-input").forEach(i=>i.addEventListener("input",()=>live(n)));live(n);
 }
 function live(n){const crit=categories[n.cat][1],vals=crit.map((_,i)=>+($('sc'+i)?.value||0));$('liveTotal').textContent="Current weighted score: "+pct(vals,crit,data.settings.max).toFixed(2)+"%"}
 
 window.submitScore=run(async id=>{
- const n=data.nominees.find(x=>x.id===id),j=sel.value,crit=categories[n.cat][1],max=data.settings.max;
+ const n=data.nominees.find(x=>x.id===id),j=data.me||"",crit=categories[n.cat][1],max=data.settings.max;
  if(!j)return alert("Select your name.");
  if($('coi').value!=="none")return alert("Declare no conflict of interest before scoring.");
  const lo=max<=10?1:0;
@@ -547,6 +563,7 @@ window.clearScores=run(async()=>{
 // judge has already submitted. Doing it by hand in the list below would orphan them.
 function renderJudgePanel(){
  const el=$('judgePanel');if(!el)return;
+ if(!PIN){el.innerHTML='<div class="empty">The panel is confidential. Enter the admin PIN to see and manage it.<br><br><button class="btn gold" onclick="unlock()">Unlock (admin)</button></div>';return}
  const list=data.judges||[];
  const sheets=j=>(data.scores||[]).filter(s=>s.judge===j).length;
  el.innerHTML=(list.length?'<div class="tablewrap"><table><tr><th>Judge</th><th>Sheets in</th><th></th></tr>'+
@@ -604,7 +621,7 @@ function renderHelp(){
   <div class="panel"><h3>For judges</h3>
    <p>Everything you do is saved to one shared record. Nothing is kept on the computer you are using, so you can start on one machine and finish on another.</p>
    <ol>
-    <li><b>Go to Scoring.</b> Choose your name, then type the personal code the organisers gave you. The page loads your own work only; you never see another judge's scores.</li>
+    <li><b>Go to Scoring.</b> Type your name and the personal code the organisers gave you, then press Sign in. The page loads your own work only; you never see another judge's scores.</li>
     <li><b>Choose a nominee</b> from the list.</li>
     <li><b>Declare the conflict of interest.</b> If you know the nominee well enough that it could affect your judgement, choose to recuse yourself. That is recorded and you are not asked to score them.</li>
     <li><b>Score each of the six criteria from 1 to 5</b> and write a short reason for every one. The reason is required. The app applies the weights and shows your running total.</li>
@@ -666,7 +683,7 @@ window.saveSettings=run(async()=>{
  if(np)PIN=np;$('newPin').value="";await refresh();alert("Settings saved.");
 });
 $('settings').insertAdjacentHTML('beforeend',`<div class="panel"><h3>Judges on the panel</h3>
- <p class="muted">These are the names judges choose from on the Scoring page. A judge who is not on this list cannot score.</p>
+ <p class="muted">These are the names judges sign in with on the Scoring page (they type the name; it is never shown to the public). A judge who is not on this list cannot score.</p>
  <div id="judgePanel"></div>
  <label for="judgeList">Judge list (one name per line)</label><textarea id="judgeList" style="min-height:120px"></textarea>
  <div class="notice" style="border-left-color:#c0392b"><b>Do not rename a judge by editing this box.</b> Scores are filed under the name used when they were submitted, so a name changed here leaves them behind. Use the Rename button above, which refuses the change if it would strand anything.</div>
@@ -693,6 +710,10 @@ window.exportXLSX=run(async()=>{
  XLSX.writeFile(wb,"TVET_Awards_MASTER.xlsx");
 });
 
+// guard every admin action (defined above, so they are all in place by now)
+["addNominee","deleteNominee","importNominees","clearScores","addJudge","renameJudge","removeJudge","saveSettings"].forEach(n=>{
+ const f=window[n];window[n]=run(async(...a)=>{await needAdmin();return f(...a)});
+});
 // ---------- UI refresh + live updates ----------
 const oldUpdate=window.updateAll;
 window.updateAll=function(){
