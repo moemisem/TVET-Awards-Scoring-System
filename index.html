@@ -495,6 +495,7 @@ window.loadScoreForm=function(){
  const id=$('scoreNominee').value,n=data.nominees.find(x=>x.id===id),el=$('scoreForm'),j=data.me||"";
  if(!n){el.innerHTML="";return}
  if(!j){el.innerHTML='<div class="notice">Sign in with your name and code first.</div>';return}
+ if(!categories[n.cat]){el.innerHTML='<div class="notice">This nominee has no valid award category on the register. Ask the organisers to correct it.</div>';return}
  const ex=data.scores.find(s=>s.nomineeId===id&&s.judge===j);
  el.innerHTML=`<h3 style="margin-top:25px">${escHTML(categories[n.cat][0])}</h3><label>Conflict of interest</label>
  <select id="coi"><option value="">-- Declare --</option><option value="none">I have NO conflict of interest with this nominee</option><option value="conflict">I HAVE a conflict - I recuse myself</option></select><div id="coiBody"></div>`;
