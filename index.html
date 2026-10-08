@@ -32,6 +32,14 @@ table{width:100%;border-collapse:collapse}th,td{padding:11px;border-bottom:1px s
 .grid>*,.cards>*{min-width:0}
 .panel select,.panel input,.panel textarea{max-width:100%;box-sizing:border-box}
 .tablewrap table{min-width:420px}
+
+/* Add Nominee: basic fields on the left, nomination details on the right. */
+#addNomineeGrid{grid-template-columns:minmax(260px,1fr) 2fr;align-items:start}
+#addRight .dbox{margin-top:0}
+.xgrid{display:grid;grid-template-columns:1fr 1fr;gap:0 14px}
+.xwide{grid-column:1/-1}
+@media(max-width:900px){#addNomineeGrid{grid-template-columns:1fr}}
+@media(max-width:560px){.xgrid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -65,23 +73,28 @@ table{width:100%;border-collapse:collapse}th,td{padding:11px;border-bottom:1px s
 
 <section id="nominees" class="page">
   <div class="hero"><h2>NATIONAL TVET EXCELLENCE AWARDS 2026 — Nominee Management</h2><p>Add and manage lecturers or teams entering the awards.</p></div>
-  <div class="grid">
-    <div class="panel"><h3>Add Nominee</h3>
-      <label>Nominee / Lecturer Name</label><input id="nName" placeholder="e.g. Dr. Jane Doe">
-      <label>College / Institution</label><select id="nCollege"></select>
-      <label>Award Category</label><select id="nCategory"></select>
-      <label>Nomination ID</label><input id="nId" placeholder="e.g. TVET-001">
-      <div class="actions"><button class="btn green" id="saveNomineeBtn" onclick="addNominee()">Save Nominee</button> <button class="btn" id="cancelEditNominee" onclick="cancelNomineeEdit()" style="display:none">Cancel edit</button></div>
-      <div id="nomineeFormNote" class="notice" style="display:none"></div>
+
+  <div class="panel"><h3>Add Nominee</h3>
+    <div class="grid" id="addNomineeGrid">
+      <div id="addLeft">
+        <label>Nominee / Lecturer Name</label><input id="nName" placeholder="e.g. Dr. Jane Doe">
+        <label>College / Institution</label><select id="nCollege"></select>
+        <label>Award Category</label><select id="nCategory"></select>
+        <label>Nomination ID</label><input id="nId" placeholder="e.g. TVET-001">
+        <div class="actions"><button class="btn green" id="saveNomineeBtn" onclick="addNominee()">Save Nominee</button> <button class="btn" id="cancelEditNominee" onclick="cancelNomineeEdit()" style="display:none">Cancel edit</button></div>
+        <div id="nomineeFormNote" class="notice" style="display:none"></div>
+      </div>
+      <div id="addRight"></div>
     </div>
-    <div class="panel"><h3>Import the whole list</h3>
-      <p class="muted">Download the template, fill in one nominee per row, then upload it. Nothing already on the register is overwritten and every skipped row is listed with the reason.</p>
-      <div class="actions"><button class="btn" onclick="downloadTemplate()">Download template (Excel)</button> <button class="btn" onclick="downloadTemplateCsv()">CSV instead</button></div>
-      <label for="importFile">Upload your filled-in file</label>
-      <input id="importFile" type="file" accept=".xlsx,.xls,.csv">
-      <div id="importReport"></div>
-    </div>
-    <div class="panel"><h3>Nominees</h3><div id="nomineeList"></div></div>
+  </div>
+
+  <div class="panel"><h3>Nominees</h3><div id="nomineeList"></div></div>
+
+  <div class="panel"><h3>Import the whole list</h3>
+    <p class="muted">Upload an Excel or CSV file with one nominee per row. The first row must have these headings: Nomination ID, Nominee name, College, Award category. The detail columns are optional. Nothing already on the register is overwritten and every skipped row is listed with the reason.</p>
+    <label for="importFile">Upload your filled-in file</label>
+    <input id="importFile" type="file" accept=".xlsx,.xls,.csv">
+    <div id="importReport"></div>
   </div>
 </section>
 
@@ -405,7 +418,7 @@ window.importNominees=run(async file=>{
  const col=name=>head.findIndex(h=>h.startsWith(name));
  const iId=col("nomination id"),iName=col("nominee"),iCollege=col("college"),iCat=col("award category");
  const iEx=[];EXTRA_FIELDS.forEach(([k,label])=>{const i=head.indexOf(norm(label).toLowerCase());if(i>=0)iEx.push([k,i])});   // optional detail columns
- if(iName<0||iCollege<0||iCat<0)throw new Error("That file does not look like the template. Download the template and fill that in.");
+ if(iName<0||iCollege<0||iCat<0)throw new Error("That file does not have the expected column headings. The first row needs: Nomination ID, Nominee name, College, Award category.");
  const added=[],skipped=[],queue=[];
  const takenIds=new Set(data.nominees.map(n=>String(n.id)));
  const takenPeople=new Set(data.nominees.map(n=>loose(n.name)+"|"+loose(n.college)+"|"+n.cat));   // same person may be entered once per award category
@@ -645,15 +658,15 @@ function renderHelp(){
  </div>
  <div class="grid">
   <div class="panel"><h3>Uploading the whole list</h3>
-   <p>Nominees page, right-hand panel.</p>
+   <p>Nominees page, at the bottom.</p>
    <ol>
-    <li>Press <b>Download template</b>. Excel needs an internet connection the first time; the <b>CSV instead</b> button needs none and opens in Excel the same way.</li>
-    <li>Fill in one nominee per row. The second sheet of the Excel template lists every category and every college so the wording can be copied exactly.</li>
+    <li>Prepare an Excel or CSV file with the headings Nomination ID, Nominee name, College and Award category in the first row. The detail columns are optional.</li>
+    <li>Fill in one nominee per row, using the exact college and award category names shown in this app.</li>
     <li>Leave the Nomination ID blank unless you have your own numbering.</li>
     <li>Upload the file. Rows go in one at a time with a counter on screen.</li>
    </ol>
    <p>The award category can be the full name or just its number. A college can be typed without the words "TVET College", and capitals and extra spaces do not matter.</p>
-   <p><b>Nothing already on the register is overwritten.</b> A row is skipped, and listed with its row number and the reason, when it is the example row, has no name, college or category, names a college or category the app does not recognise, repeats somebody already on the register, or uses a Nomination ID that is taken.</p>
+   <p><b>Nothing already on the register is overwritten.</b> A row is skipped, and listed with its row number and the reason, when it has no name, college or category, names a college or category the app does not recognise, repeats somebody already on the register, or uses a Nomination ID that is taken.</p>
   </div>
   <div class="panel"><h3>If something looks wrong</h3>
    <p><b>The page seems frozen.</b> A panel saying it is talking to the shared record means a request is in flight. Google can take a few seconds to wake up. Wait for it to clear.</p>
@@ -674,7 +687,7 @@ function renderHelp(){
   </div>
   <div class="panel"><h3>The award categories</h3>
    <table><tr><th>#</th><th>Category</th></tr>${cats}</table>
-   <p class="muted" style="margin-top:14px">Use either the number or the full name in the upload template.</p>
+   <p class="muted" style="margin-top:14px">Use either the number or the full name in the upload file.</p>
   </div>
  </div>`;
 }
@@ -779,8 +792,10 @@ window.renderNominees=function(){
   b.previousElementSibling.onclick=()=>viewNominee(b.dataset.edit);
  });
 };
-$('saveNomineeBtn').parentElement.insertAdjacentHTML("beforebegin",'<details class="dbox" id="nExtra" open><summary>Nomination details</summary><p class="muted">Judges read these when they score this nominee, so fill in the motivation and evidence. Contact details and who nominated them are kept from judges.</p>'+
- EXTRA_FIELDS.map(([k,l])=>"<label>"+escHTML(l)+"</label>"+(DETAIL_LONG.has(k)?'<textarea id="x_'+k+'" style="min-height:80px"></textarea>':'<input id="x_'+k+'">')).join("")+"</details>");
+// Nomination detail fields sit in the right-hand column of the Add Nominee panel.
+// Short fields run two to a row; the long motivation and evidence boxes span the full width.
+$('addRight').insertAdjacentHTML("beforeend",'<details class="dbox" id="nExtra" open><summary>Nomination details</summary><p class="muted">Judges read these when they score this nominee, so fill in the motivation and evidence. Contact details and who nominated them are kept from judges.</p><div class="xgrid">'+
+ EXTRA_FIELDS.map(([k,l])=>'<div class="'+(DETAIL_LONG.has(k)?'xwide':'')+'"><label>'+escHTML(l)+'</label>'+(DETAIL_LONG.has(k)?'<textarea id="x_'+k+'" style="min-height:80px"></textarea>':'<input id="x_'+k+'">')+'</div>').join("")+'</div></details>');
 let extraLoaded=false;
 function clearExtra(){EXTRA_FIELDS.forEach(([k])=>{$("x_"+k).value=""});extraLoaded=false}
 function collectExtra(){
