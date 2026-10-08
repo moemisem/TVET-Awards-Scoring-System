@@ -308,12 +308,12 @@ window.addNominee=run(async()=>{
   id=editingNominee;
  } else {
   if(id&&taken.has(id))return alert("Nomination ID "+id+" is already used. Choose another or leave it blank.");
-  const clash=data.nominees.find(x=>loose(x.name)===loose(name)&&loose(x.college)===loose(college));
-  if(clash&&!confirm(name+" from "+college+" is already on the register as "+clash.id+". Add them again anyway?"))return;
+  const clash=data.nominees.find(x=>loose(x.name)===loose(name)&&loose(x.college)===loose(college)&&x.cat===cat);
+  if(clash&&!confirm(name+" from "+college+" is already on the register in this category as "+clash.id+". Add them again anyway?"))return;
   if(!id)id=nextId(taken);
  }
  busy(editingNominee?"Updating the nominee...":"Adding the nominee...");
- try{ await api("nominee",{id,name,college,cat,catName:categories[cat][0]},true); } finally { busy(false) }
+ try{ await api("nominee",{id,name,college,cat,catName:categories[cat][0],extra:collectExtra()},true);detailCache={}; } finally { busy(false) }
  const wasEdit=editingNominee;
  cancelNomineeEdit();
  await refresh();
@@ -330,7 +330,9 @@ window.deleteNominee=run(async id=>{
 // ---------- bulk import ----------
 // One nominee per row. Added one at a time through the same "nominee" action the
 // form uses, so nothing changes on the Apps Script side.
-const TEMPLATE_HEADERS=["Nomination ID","Nominee name","College","Award category"];
+// Extra nomination details (key, column heading). Same keys and headings as Code.gs.
+const EXTRA_FIELDS=[["source","Source"],["title","Title"],["campus","Campus"],["department","Department"],["designation","Designation"],["status","Status"],["experience","Years of experience"],["province","Province"],["employeeNo","Employee number"],["focus","Focus area (subjects)"],["learners","Annual learners"],["email","Email"],["mobile","Mobile"],["nominator","Nominator"],["relationship","Nominator relationship"],["nominatorContact","Nominator contact"],["nominationDate","Nomination date"],["motivation","Motivation summary"],["why","Why deserving"],["impact","Measurable impact / evidence summary"],["profile","Professional profile"],["philosophy","Teaching philosophy"],["examples","Examples (teaching, curriculum, innovation)"],["evidence","Evidence, previous two academic years"]];
+const TEMPLATE_HEADERS=["Nomination ID","Nominee name","College","Award category",...EXTRA_FIELDS.map(x=>x[1])];
 const norm=v=>String(v??"").replace(/\s+/g," ").trim();
 const loose=v=>norm(v).toLowerCase().replace(/\btvet college\b/,"").replace(/[^a-z0-9]/g,"");
 const matchCollege=v=>colleges.find(c=>loose(c)===loose(v))||null;
@@ -402,10 +404,11 @@ window.importNominees=run(async file=>{
  const head=(rows[0]||[]).map(h=>norm(h).toLowerCase());
  const col=name=>head.findIndex(h=>h.startsWith(name));
  const iId=col("nomination id"),iName=col("nominee"),iCollege=col("college"),iCat=col("award category");
+ const iEx=[];EXTRA_FIELDS.forEach(([k,label])=>{const i=head.indexOf(norm(label).toLowerCase());if(i>=0)iEx.push([k,i])});   // optional detail columns
  if(iName<0||iCollege<0||iCat<0)throw new Error("That file does not look like the template. Download the template and fill that in.");
  const added=[],skipped=[],queue=[];
  const takenIds=new Set(data.nominees.map(n=>String(n.id)));
- const takenPeople=new Set(data.nominees.map(n=>loose(n.name)+"|"+loose(n.college)));
+ const takenPeople=new Set(data.nominees.map(n=>loose(n.name)+"|"+loose(n.college)+"|"+n.cat));   // same person may be entered once per award category
  for(let r=1;r<rows.length;r++){
   const row=rows[r]||[],line=r+1;
   const name=norm(row[iName]),collegeRaw=norm(row[iCollege]),catRaw=norm(row[iCat]);
@@ -417,12 +420,12 @@ window.importNominees=run(async file=>{
   if(!college){skipped.push({line,name,why:collegeRaw?"College not in the pilot list: "+collegeRaw:"No college given"});continue}
   const cat=matchCategory(catRaw);
   if(cat<0){skipped.push({line,name,why:catRaw?"Award category not recognised: "+catRaw:"No award category given"});continue}
-  const person=loose(name)+"|"+loose(college);
-  if(takenPeople.has(person)){skipped.push({line,name,why:"Already on the register"});continue}
+  const person=loose(name)+"|"+loose(college)+"|"+cat;
+  if(takenPeople.has(person)){skipped.push({line,name,why:"Already on the register in that award category"});continue}
   if(id&&takenIds.has(id)){skipped.push({line,name,why:"Nomination ID "+id+" is already used"});continue}
   if(!id)id=nextId(takenIds);
   takenIds.add(id);takenPeople.add(person);
-  queue.push({line,id,name,college,cat});
+  queue.push({line,id,name,college,cat,extra:iEx.length?Object.fromEntries(iEx.map(([k,i])=>[k,String(row[i]??"").trim()])):undefined});
  }
  const report=()=>{
   $('importReport').innerHTML='<div class="notice" style="margin-top:14px"><b>'+added.length+" added</b> to the shared record"+
@@ -436,7 +439,7 @@ window.importNominees=run(async file=>{
    const row=queue[i];
    busy("Adding nominee "+(i+1)+" of "+queue.length+"...");
    try{
-    await api("nominee",{id:row.id,name:row.name,college:row.college,cat:row.cat,catName:categories[row.cat][0]},true);
+    await api("nominee",{id:row.id,name:row.name,college:row.college,cat:row.cat,catName:categories[row.cat][0],extra:row.extra},true);
     added.push(row);
    }catch(e){
     if(e.message==="cancelled")throw e;
@@ -710,6 +713,88 @@ window.exportXLSX=run(async()=>{
  add("Change Log",data.log);add("Recusals",data.recusals);
  XLSX.writeFile(wb,"TVET_Awards_MASTER.xlsx");
 });
+
+
+// ---------- nomination details ----------
+// Long nomination text is fetched one nominee at a time ("details" action), never sent with the
+// list. The admin PIN sees every field; a judge (name + code) does not get contact details or
+// who nominated the lecturer. That rule is enforced by the sheet, not by this page.
+const DETAIL_GROUPS=[["About the nominee",["source","title","campus","department","designation","status","experience","province","focus","learners","employeeNo"]],["Nomination",["nominator","relationship","nominatorContact","nominationDate"]],["Contact details",["email","mobile"]],["Motivation and evidence",["motivation","why","impact","profile","philosophy","examples","evidence"]]];
+const DETAIL_LONG=new Set(["motivation","why","impact","profile","philosophy","examples","evidence"]);
+const DETAIL_LABEL=Object.fromEntries(EXTRA_FIELDS);
+const dst=document.createElement("style");
+dst.textContent=".dgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:8px 18px;margin:6px 0 12px}.dgrid b,.dlabel{display:block;font-size:12px;color:#68758a;font-weight:600}.dtext{white-space:pre-wrap;background:#f7f9fc;border-radius:8px;padding:10px 12px;margin:4px 0 12px;font-size:14px;line-height:1.5}.dbox{border:1px solid #dfe6ef;border-radius:12px;padding:6px 16px 4px;margin:14px 0;background:#fff}.dbox summary{cursor:pointer;font-weight:700;padding:8px 0}.dbox h4{margin:14px 0 4px;color:#145da0}";
+document.head.appendChild(dst);
+let detailCache={};
+async function fetchDetails(id){
+ const code=(($('judgeCode')||{}).value||"").trim(),key=(PIN?"A|":"J|"+(data.me||"")+"|"+code+"|")+id;
+ if(detailCache[key])return detailCache[key];
+ const body={action:"details",id:String(id)};
+ if(PIN)body.pin=PIN;else{body.judge=data.me;body.code=code}
+ const r=await fetch(SHEET_URL,{method:"POST",body:JSON.stringify(body)}),d=await r.json();
+ if(d.error){if(/PIN/.test(d.error))PIN=null;throw new Error(d.error)}
+ return detailCache[key]=d.fields||{};
+}
+function detailsHTML(f){
+ let out="";
+ DETAIL_GROUPS.forEach(([title,keys])=>{
+  const have=keys.filter(k=>String(f[k]||"").trim());if(!have.length)return;
+  const short=have.filter(k=>!DETAIL_LONG.has(k)),long=have.filter(k=>DETAIL_LONG.has(k));
+  out+="<h4>"+escHTML(title)+"</h4>";
+  if(short.length)out+='<div class="dgrid">'+short.map(k=>"<div><b>"+escHTML(DETAIL_LABEL[k])+"</b>"+escHTML(f[k])+"</div>").join("")+"</div>";
+  long.forEach(k=>{out+='<span class="dlabel">'+escHTML(DETAIL_LABEL[k])+'</span><div class="dtext">'+escHTML(f[k])+"</div>"});
+ });
+ return out||'<p class="muted">No nomination details have been loaded for this nominee yet. Ask the organisers before scoring.</p>';
+}
+// Judge page: details of the selected nominee, shown above the scoring form.
+$('scoreNominee').insertAdjacentHTML("afterend",'<div id="nomDetails"></div>');
+async function showNomDetails(id){
+ const el=$('nomDetails');if(!el)return;
+ if(!id||(!PIN&&!data.me)){el.innerHTML="";return}
+ el.innerHTML='<div class="dbox"><p class="muted">Loading the nomination details...</p></div>';
+ try{
+  const f=await fetchDetails(id);
+  if($('scoreNominee').value!==id)return;          // they picked someone else meanwhile
+  el.innerHTML='<div class="dbox"><h3 style="margin:12px 0 0">Nomination details</h3>'+detailsHTML(f)+"</div>";
+ }catch(e){if($('scoreNominee').value===id)el.innerHTML='<div class="notice">Could not load the nomination details: '+escHTML(e.message)+"</div>"}
+}
+const loadFormOnly=window.loadScoreForm;
+window.loadScoreForm=function(){loadFormOnly();showNomDetails($('scoreNominee').value)};
+
+// Admin: a Details button on every nominee row, and optional detail fields on the add/edit form.
+$('nomineeList').insertAdjacentHTML("afterend",'<div id="nomineeDetail"></div>');
+window.viewNominee=run(async id=>{
+ if(!PIN)await needAdmin();
+ const n=data.nominees.find(x=>String(x.id)===String(id)),box=$('nomineeDetail');
+ box.innerHTML='<div class="dbox"><p class="muted">Loading...</p></div>';
+ const f=await fetchDetails(id);
+ box.innerHTML='<details class="dbox" open><summary>'+escHTML(n?n.name:id)+" - nomination details</summary>"+detailsHTML(f)+"</details>";
+ box.scrollIntoView({behavior:"smooth",block:"nearest"});
+});
+const renderNomineesBase=window.renderNominees;
+window.renderNominees=function(){
+ renderNomineesBase();
+ document.querySelectorAll("#nomineeList [data-edit]").forEach(b=>{
+  b.insertAdjacentHTML("beforebegin",'<button class="btn" data-view="'+escHTML(b.dataset.edit)+'">Details</button> ');
+  b.previousElementSibling.onclick=()=>viewNominee(b.dataset.edit);
+ });
+};
+$('saveNomineeBtn').parentElement.insertAdjacentHTML("beforebegin",'<details class="dbox" id="nExtra" open><summary>Nomination details</summary><p class="muted">Judges read these when they score this nominee, so fill in the motivation and evidence. Contact details and who nominated them are kept from judges.</p>'+
+ EXTRA_FIELDS.map(([k,l])=>"<label>"+escHTML(l)+"</label>"+(DETAIL_LONG.has(k)?'<textarea id="x_'+k+'" style="min-height:80px"></textarea>':'<input id="x_'+k+'">')).join("")+"</details>");
+let extraLoaded=false;
+function clearExtra(){EXTRA_FIELDS.forEach(([k])=>{$("x_"+k).value=""});extraLoaded=false}
+function collectExtra(){
+ const o=Object.fromEntries(EXTRA_FIELDS.map(([k])=>[k,$("x_"+k).value.trim()]));
+ return (extraLoaded||Object.values(o).some(Boolean))?o:undefined;   // nothing sent = the sheet keeps what it has
+}
+const editBase=window.editNominee;
+window.editNominee=async id=>{
+ editBase(id);clearExtra();
+ if(!PIN)return;
+ try{const f=await fetchDetails(id);EXTRA_FIELDS.forEach(([k])=>{$("x_"+k).value=f[k]||""});extraLoaded=true}catch(e){}
+};
+const cancelBase=window.cancelNomineeEdit;
+window.cancelNomineeEdit=()=>{cancelBase();clearExtra()};
 
 // guard every admin action (defined above, so they are all in place by now)
 ["addNominee","deleteNominee","importNominees","clearScores","addJudge","renameJudge","removeJudge","saveSettings"].forEach(n=>{
