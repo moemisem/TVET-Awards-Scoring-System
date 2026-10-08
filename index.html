@@ -355,6 +355,14 @@ window.deleteNominee=run(async id=>{
 const EXTRA_FIELDS=[["source","Source"],["title","Title"],["campus","Campus"],["department","Department"],["designation","Designation"],["status","Status"],["experience","Years of experience"],["province","Province"],["employeeNo","Employee number"],["focus","Focus area (subjects)"],["learners","Annual learners"],["email","Email"],["mobile","Mobile"],["nominator","Nominator"],["relationship","Nominator relationship"],["nominatorContact","Nominator contact"],["nominationDate","Nomination date"],["motivation","Motivation summary"],["why","Why deserving"],["impact","Measurable impact / evidence summary"],["profile","Professional profile"],["philosophy","Teaching philosophy"],["examples","Examples (teaching, curriculum, innovation)"],["evidence","Evidence, previous two academic years"]];
 const TEMPLATE_HEADERS=["Nomination ID","Nominee name","College","Award category",...EXTRA_FIELDS.map(x=>x[1])];
 const norm=v=>String(v??"").replace(/\s+/g," ").trim();
+// South African numbers are stored as +27 XX XXX XXXX. Excel drops the leading 0, so a 9-digit number is
+// taken to be missing it. Anything that is not clearly a SA number is left exactly as typed.
+function normPhone(v){
+ const t=String(v??"").trim();if(!t)return "";
+ const d=t.replace(/\D/g,"");let rest;
+ if(d.startsWith("27")&&d.length===11)rest=d.slice(2);else if(d.length===10&&d[0]==="0")rest=d.slice(1);else if(d.length===9)rest=d;else return t;
+ return "+27 "+rest.slice(0,2)+" "+rest.slice(2,5)+" "+rest.slice(5);
+}
 const loose=v=>norm(v).toLowerCase().replace(/\btvet college\b/,"").replace(/[^a-z0-9]/g,"");
 const matchCollege=v=>colleges.find(c=>loose(c)===loose(v))||null;
 const matchCategory=v=>{
@@ -446,7 +454,7 @@ window.importNominees=run(async file=>{
   if(id&&takenIds.has(id)){skipped.push({line,name,why:"Nomination ID "+id+" is already used"});continue}
   if(!id)id=nextId(takenIds);
   takenIds.add(id);takenPeople.add(person);
-  queue.push({line,id,name,college,cat,extra:iEx.length?Object.fromEntries(iEx.map(([k,i])=>[k,String(row[i]??"").trim()])):undefined});
+  queue.push({line,id,name,college,cat,extra:iEx.length?Object.fromEntries(iEx.map(([k,i])=>[k,k==="mobile"?normPhone(row[i]):String(row[i]??"").trim()])):undefined});
  }
  const report=()=>{
   $('importReport').innerHTML='<div class="notice" style="margin-top:14px"><b>'+added.length+" added</b> to the shared record"+
@@ -804,10 +812,11 @@ window.renderNominees=function(){
 // Short fields run two to a row; the long motivation and evidence boxes span the full width.
 $('addRight').insertAdjacentHTML("beforeend",'<details class="dbox" id="nExtra" open><summary>Nomination details</summary><p class="muted">Judges read these when they score this nominee, so fill in the motivation and evidence. Contact details and who nominated them are kept from judges.</p><div class="xgrid">'+
  EXTRA_FIELDS.map(([k,l])=>'<div class="'+(DETAIL_LONG.has(k)?'xwide':'')+'"><label>'+escHTML(l)+'</label>'+(DETAIL_LONG.has(k)?'<textarea id="x_'+k+'" style="min-height:80px"></textarea>':'<input id="x_'+k+'">')+'</div>').join("")+'</div></details>');
+{const m=$("x_mobile");m.type="tel";m.placeholder="+27 82 123 4567";m.onblur=()=>{m.value=normPhone(m.value)}}
 let extraLoaded=false;
 function clearExtra(){EXTRA_FIELDS.forEach(([k])=>{$("x_"+k).value=""});extraLoaded=false}
 function collectExtra(){
- const o=Object.fromEntries(EXTRA_FIELDS.map(([k])=>[k,$("x_"+k).value.trim()]));
+ const o=Object.fromEntries(EXTRA_FIELDS.map(([k])=>[k,k==="mobile"?normPhone($("x_"+k).value):$("x_"+k).value.trim()]));
  return (extraLoaded||Object.values(o).some(Boolean))?o:undefined;   // nothing sent = the sheet keeps what it has
 }
 const editBase=window.editNominee;
