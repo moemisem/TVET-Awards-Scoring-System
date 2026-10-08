@@ -207,7 +207,7 @@ const parseR=(txt,crit)=>{const m={};String(txt||"").split("\n").forEach(l=>{con
 // ---------- Google Sheet API ----------
 // IMPORTANT: this must be the Web app URL of the deployment that runs the latest Code.gs
 // (https://script.google.com/macros/s/....../exec)
-const SHEET_URL="https://script.google.com/macros/s/AKfycbxbteKG2VCg8PyjQmHoy-2V4vPkkIGHp4Z5_8BVe5D1opsGyxAGO9bFT9TYXbVLHyt1/exec";
+const SHEET_URL="https://script.google.com/macros/s/AKfycbwXOBrM1AaMIh7Jkc_ifGTlf1Kwl2RqBh7_MsTRPWSAGYM4IEFqGgeXjQIdn1EUc4Nfzw/exec";
 let PIN=null;
 async function api(action,body={},admin){
  if(admin){PIN=PIN||prompt("Admin PIN:");if(!PIN)throw new Error("cancelled")}
