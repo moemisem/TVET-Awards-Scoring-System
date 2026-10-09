@@ -251,14 +251,17 @@ function busy(text){
 }
 const run=f=>async(...a)=>{try{return await f(...a)}catch(e){if(e.message!=="cancelled")alert(e.message)}};
 // Scoped read: admin PIN gets everything, a judge's name + code gets only that judge's own rows.
+let refreshSeq=0;   // only the newest read may update the page, so a slow page-load read cannot wipe a sign-in
 async function refresh(){
+ const mySeq=++refreshSeq;
  const j=sel.value.trim(),c=(($('judgeCode')||{}).value||"").trim();
  busy("Checking the shared record...");
  try{
   const r=await fetch(SHEET_URL,{method:"POST",body:JSON.stringify({action:"read",pin:PIN||undefined,judge:(j&&c)?j:undefined,code:(j&&c)?c:undefined})});
-  const d=await readJson(r);if(d.error){if(/PIN/.test(d.error))PIN=null;throw new Error(d.error)}
+  const d=await readJson(r);if(mySeq!==refreshSeq)return;   // a newer read has started: ignore this older answer
+  if(d.error){if(/PIN/.test(d.error))PIN=null;throw new Error(d.error)}
   data.me=undefined;Object.assign(data,d);updateAll()
- } finally { busy(false) }}
+ } finally { if(mySeq===refreshSeq)busy(false) }}
 window.unlock=run(async()=>{PIN=prompt("Admin PIN:");if(!PIN)return;try{await refresh()}catch(e){PIN=null;throw e}});
 
 // ---------- judge sign-in ----------
@@ -271,7 +274,7 @@ sel.onchange=()=>{
  $('judgeCode').value="";$('scoreForm').innerHTML="";$('scoreNominee').value="";
  loginMsg("Now type your personal code and press Sign in.");updateAll();
 };
-sel.insertAdjacentHTML('afterend','<label>Your personal code</label><input id="judgeCode" type="password" autocomplete="off" placeholder="Code given to you by the organisers">'+
+sel.insertAdjacentHTML('afterend','<label>Your personal code</label><input id="judgeCode" type="password" autocomplete="new-password" placeholder="Code given to you by the organisers">'+
  '<div class="actions" style="margin-top:10px"><button class="btn green" id="judgeSignIn">Sign in</button></div><div id="loginMsg" class="muted" style="margin-top:8px">Choose your name from the list, type your code, then press Sign in to load the nominees.</div>');
 function loginMsg(t,bad){const e=$('loginMsg');e.textContent=t;e.style.color=bad?"#c0392b":""}
 window.judgeSignIn=async()=>{
