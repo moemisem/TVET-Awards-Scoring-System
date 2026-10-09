@@ -588,7 +588,7 @@ window.submitScore=run(async id=>{
 });
 
 // ---------- results (administrator and auditors) ----------
-const auditorBox=()=>'<div style="max-width:340px;margin:18px auto 0;text-align:left"><b>Internal audit / Legal services</b><div class="muted" style="margin:2px 0 6px">Legal Services and Internal Audit reviewers (read-only).</div><input id="audName" placeholder="Your name" autocomplete="off"><input id="audCode" type="password" placeholder="Your code" autocomplete="new-password" style="margin-top:8px"><div class="actions"><button class="btn green" onclick="auditorSignIn()">Sign in as auditor</button></div></div>';
+const auditorBox=()=>'<div style="max-width:340px;margin:18px auto 0;text-align:left"><b>Auditor sign-in</b><div class="muted" style="margin:2px 0 6px">Legal Services and Internal Audit reviewers (read-only).</div><input id="audName" placeholder="Your name" autocomplete="off"><input id="audCode" type="password" placeholder="Your code" autocomplete="new-password" style="margin-top:8px"><div class="actions"><button class="btn green" onclick="auditorSignIn()">Sign in as auditor</button></div></div>';
 window.auditorSignIn=run(async()=>{
  const n=($('audName')||{}).value||"",c=($('audCode')||{}).value||"";
  if(!n.trim()||!c.trim())throw new Error("Enter your name and code.");
@@ -874,16 +874,36 @@ window.updateAll=function(){
 };
 
 // ---------- audit trail (administrator and auditors) ----------
+const ast=document.createElement("style");
+ast.textContent=".aud-n{border:1px solid #dfe6ef;border-radius:12px;background:#fff;margin:12px 0;overflow:hidden}.aud-n>summary{cursor:pointer;padding:12px 16px;background:#f4f7fb;font-weight:bold;color:#0b1f3a;display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between;list-style:none}.aud-n>summary::-webkit-details-marker{display:none}.aud-n>summary small{font-weight:normal;color:#68758a;display:block}.aud-j{padding:14px 16px;border-top:1px solid #e5eaf0}.aud-jh{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px}.aud-jh b{color:#145da0}.aud-jh span{color:#68758a;font-size:13px}.aud-t{width:100%;border-collapse:collapse;table-layout:fixed}.aud-t th{background:#eef3f8;font-size:12px;padding:7px 9px;text-align:left}.aud-t td{padding:8px 9px;border-bottom:1px solid #eef1f5;vertical-align:top;font-size:14px;line-height:1.45;overflow-wrap:anywhere}.aud-t td.sc{text-align:center;font-weight:bold;color:#145da0;white-space:nowrap}.aud-chip{display:inline-block;padding:3px 9px;border-radius:20px;background:#e9f2fb;color:#145da0;font-size:12px;font-weight:bold}@media(max-width:560px){.aud-t,.aud-t tbody,.aud-t tr,.aud-t td{display:block;width:100%}.aud-t thead{display:none}.aud-t tr{border-bottom:1px solid #e5eaf0;padding:6px 0}.aud-t td{border:0;padding:3px 9px}}";
+document.head.appendChild(ast);
 function auditHTML(){
- const nm=id=>{const n=(data.nominees||[]).find(x=>String(x.id)===String(id));return n?n.name:id};
+ const nom=id=>(data.nominees||[]).find(x=>String(x.id)===String(id));
+ const nm=id=>{const n=nom(id);return n?n.name:id};
  const byDate=(a,b)=>String(b.date).localeCompare(String(a.date));
- const sc=[...(data.scores||[])].sort(byDate),lg=[...(data.log||[])].sort(byDate),rc=[...(data.recusals||[])].sort(byDate);
+ const lg=[...(data.log||[])].sort(byDate),rc=[...(data.recusals||[])].sort(byDate);
+ const max=data.settings.max,lo=max<=10?1:0;
+ const reasons=txt=>{const m={};String(txt||"").split("\n").forEach(l=>{const x=l.match(/^\[(.*?)\] (.*)$/);if(x)m[x[1]]=x[2]});return m};
  const tbl=(h,r)=>r.length?'<div class="tablewrap" style="max-height:420px"><table><tr>'+h.map(x=>'<th>'+x+'</th>').join('')+'</tr>'+r.join('')+'</table></div>':'<p class="muted">None recorded.</p>';
- return '<details class="dbox" style="margin-top:22px" open><summary><b>Audit trail</b> - every score sheet, change and recusal, with server timestamps</summary>'+
-  '<h4>Score sheets ('+sc.length+')</h4>'+tbl(['Date','Nominee','Judge','Scores','Total','Reasons'],sc.map(s=>'<tr><td>'+escHTML(s.date)+'</td><td>'+escHTML(nm(s.nomineeId))+'</td><td>'+escHTML(s.judge)+'</td><td>'+escHTML((s.values||[]).join(' / '))+'</td><td>'+(+s.total).toFixed(2)+'%</td><td style="min-width:240px">'+escHTML(s.comments||'')+'</td></tr>'))+
-  '<h4>Changes to submitted scores ('+lg.length+')</h4>'+tbl(['Date','Nominee','Judge','Old %','New %','Reason'],lg.map(l=>'<tr><td>'+escHTML(l.date)+'</td><td>'+escHTML(nm(l.nomineeId))+'</td><td>'+escHTML(l.judge)+'</td><td>'+escHTML(l.oldTotal)+'</td><td>'+escHTML(l.newTotal)+'</td><td>'+escHTML(l.reason)+'</td></tr>'))+
-  '<h4>Conflicts of interest declared ('+rc.length+')</h4>'+tbl(['Date','Nominee','Judge'],rc.map(r=>'<tr><td>'+escHTML(r.date)+'</td><td>'+escHTML(nm(r.nomineeId))+'</td><td>'+escHTML(r.judge)+'</td></tr>'))+
-  '</details>';
+ const byNom={};(data.scores||[]).forEach(s=>(byNom[s.nomineeId]=byNom[s.nomineeId]||[]).push(s));
+ const ids=Object.keys(byNom).sort((a,b)=>{const x=nom(a),y=nom(b);return ((x?x.cat:99)-(y?y.cat:99))||String(nm(a)).localeCompare(String(nm(b)))});
+ const cards=ids.map(id=>{
+  const n=nom(id),crit=n&&categories[n.cat]?categories[n.cat][1]:[],ss=byNom[id].sort((a,b)=>String(a.judge).localeCompare(String(b.judge)));
+  const avg=ss.reduce((t,s)=>t+(+s.total),0)/ss.length;
+  const judges=ss.map(s=>{
+   const rs=reasons(s.comments);
+   const rows=crit.length?crit.map((c,i)=>{const [cn,w]=c.split("|");return '<tr><td><b>'+escHTML(cn)+'</b><div class="muted">weight '+escHTML(w)+'%</div></td><td class="sc">'+escHTML((s.values||[])[i]??"-")+' / '+max+'</td><td>'+(rs[cn]?escHTML(rs[cn]):'<span class="muted">No reason recorded</span>')+'</td></tr>'}).join(""):
+    '<tr><td colspan="3">'+escHTML(s.comments||"")+'</td></tr>';
+   return '<div class="aud-j"><div class="aud-jh"><b>'+escHTML(s.judge)+'</b><span>Total <b>'+(+s.total).toFixed(2)+'%</b> &middot; submitted '+escHTML(s.date)+'</span></div>'+
+    '<table class="aud-t"><thead><tr><th style="width:28%">Criterion</th><th style="width:12%">Score</th><th>Written reason</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+  }).join("");
+  return '<details class="aud-n"><summary><div>'+escHTML(nm(id))+'<small>'+escHTML(n?n.college:"")+' &middot; '+escHTML(n&&categories[n.cat]?categories[n.cat][0]:"")+'</small></div><span class="aud-chip">'+ss.length+' judge'+(ss.length===1?'':'s')+' &middot; average '+avg.toFixed(2)+'%</span></summary>'+judges+'</details>';
+ }).join("");
+ return '<div style="margin-top:26px"><h3 style="margin:0 0 4px;color:#0b1f3a">Audit trail</h3><p class="muted" style="margin:0 0 6px">Every score sheet with the judge\'s written reasons, every change to a submitted score, and every conflict declared. Open a nominee to read the reasons.</p>'+
+  '<h4 style="margin:16px 0 4px">Score sheets by nominee ('+(data.scores||[]).length+' sheets)</h4>'+(cards||'<p class="muted">None recorded.</p>')+
+  '<h4 style="margin:22px 0 4px">Changes to submitted scores ('+lg.length+')</h4>'+tbl(['Date','Nominee','Judge','Old %','New %','Reason'],lg.map(l=>'<tr><td>'+escHTML(l.date)+'</td><td>'+escHTML(nm(l.nomineeId))+'</td><td>'+escHTML(l.judge)+'</td><td>'+escHTML(l.oldTotal)+'</td><td>'+escHTML(l.newTotal)+'</td><td>'+escHTML(l.reason)+'</td></tr>'))+
+  '<h4 style="margin:22px 0 4px">Conflicts of interest declared ('+rc.length+')</h4>'+tbl(['Date','Nominee','Judge'],rc.map(r=>'<tr><td>'+escHTML(r.date)+'</td><td>'+escHTML(nm(r.nomineeId))+'</td><td>'+escHTML(r.judge)+'</td></tr>'))+
+  '</div>';
 }
 const resultsBase=window.renderResults;
 window.renderResults=function(){
