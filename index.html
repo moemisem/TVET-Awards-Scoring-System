@@ -101,7 +101,7 @@ table{width:100%;border-collapse:collapse}th,td{padding:11px;border-bottom:1px s
 <section id="scoring" class="page">
   <div class="hero"><h2>NATIONAL TVET EXCELLENCE AWARDS 2026 — Judge Scoring</h2><p>Scores are entered from 0–100 for each criterion. The app automatically applies the configured weights.</p></div>
   <div class="panel">
-    <label>Judge Name</label><input id="judgeName" placeholder="Enter judge name">
+    <label>Judge Name</label><select id="judgeName"><option value="">-- Select your name --</option></select>
     <label>Select Nominee</label><select id="scoreNominee" onchange="loadScoreForm()"></select>
     <div id="scoreForm"></div>
   </div>
@@ -262,22 +262,36 @@ async function refresh(){
 window.unlock=run(async()=>{PIN=prompt("Admin PIN:");if(!PIN)return;try{await refresh()}catch(e){PIN=null;throw e}});
 
 // ---------- judge sign-in ----------
-// The roster and the panel are private: the sheet returns nominees only for a valid
-// judge name + code (or the admin PIN), so there is no dropdown of names to choose from.
-const sel=$('judgeName');sel.placeholder="Your name, as the organisers listed it";sel.autocomplete="off";
+// Judges now choose their name from a drop-down (names only, never codes) and type
+// only their personal code. The sheet still returns nominees only for a valid
+// name + code (or the admin PIN).
+const sel=$('judgeName');
+sel.onchange=()=>{
+ data.me=undefined;if(!PIN){data.nominees=[];data.scores=[]}
+ $('judgeCode').value="";$('scoreForm').innerHTML="";$('scoreNominee').value="";
+ loginMsg("Now type your personal code and press Sign in.");updateAll();
+};
 sel.insertAdjacentHTML('afterend','<label>Your personal code</label><input id="judgeCode" type="password" autocomplete="off" placeholder="Code given to you by the organisers">'+
- '<div class="actions" style="margin-top:10px"><button class="btn green" id="judgeSignIn">Sign in</button></div><div id="loginMsg" class="muted" style="margin-top:8px">Type your name and code, then press Sign in to load the nominees.</div>');
+ '<div class="actions" style="margin-top:10px"><button class="btn green" id="judgeSignIn">Sign in</button></div><div id="loginMsg" class="muted" style="margin-top:8px">Choose your name from the list, type your code, then press Sign in to load the nominees.</div>');
 function loginMsg(t,bad){const e=$('loginMsg');e.textContent=t;e.style.color=bad?"#c0392b":""}
 window.judgeSignIn=async()=>{
  const j=sel.value.trim(),c=$('judgeCode').value.trim();
- if(!j||!c)return loginMsg("Enter both your name and your personal code.",true);
+ if(!j||!c)return loginMsg("Choose your name and enter your personal code.",true);
  try{await refresh();if(!data.me)throw new Error("Name or code not recognised.");
   sel.value=data.me;loginMsg("Signed in as "+data.me+".");if(!formInProgress())loadScoreForm();renderMyScores()}
  catch(e){data.me=undefined;loginMsg(e.message,true)}
 };
 $('judgeSignIn').onclick=judgeSignIn;
 $('judgeCode').onkeydown=e=>{if(e.key==="Enter")judgeSignIn()};
-function fillJudges(){}   // judge names are never listed to the public
+// Fill the drop-down from the names the sheet sends. The list is only rebuilt when it
+// changes, so a refresh never wipes the judge's selection.
+function fillJudges(){
+ const names=data.judgeNames||[],sig=names.join("|"),cur=sel.value;
+ if(sel.dataset.sig===sig)return;
+ sel.dataset.sig=sig;
+ sel.innerHTML='<option value="">-- Select your name --</option>'+names.map(n=>'<option value="'+escHTML(n)+'">'+escHTML(n)+'</option>').join("");
+ sel.value=names.includes(cur)?cur:"";
+}
 
 // ---------- admin guard ----------
 // The roster and judge list only exist in the page after the PIN is accepted. Anything that
@@ -654,7 +668,7 @@ function renderHelp(){
   <div class="panel"><h3>For judges</h3>
    <p>Everything you do is saved to one shared record. Nothing is kept on the computer you are using, so you can start on one machine and finish on another.</p>
    <ol>
-    <li><b>Go to Scoring.</b> Type your name and the personal code the organisers gave you, then press Sign in. The page loads your own work only; you never see another judge's scores.</li>
+    <li><b>Go to Scoring.</b> Choose your name from the list, type the personal code the organisers gave you, then press Sign in. The page loads your own work only; you never see another judge's scores.</li>
     <li><b>Choose a nominee</b> from the list.</li>
     <li><b>Declare the conflict of interest.</b> If you know the nominee well enough that it could affect your judgement, choose to recuse yourself. That is recorded and you are not asked to score them.</li>
     <li><b>Score each of the six criteria from 1 to 5</b> and write a short reason for every one. The reason is required. The app applies the weights and shows your running total.</li>
@@ -716,7 +730,7 @@ window.saveSettings=run(async()=>{
  if(np)PIN=np;$('newPin').value="";await refresh();alert("Settings saved.");
 });
 $('settings').insertAdjacentHTML('beforeend',`<div class="panel"><h3>Judges on the panel</h3>
- <p class="muted">These are the names judges sign in with on the Scoring page (they type the name; it is never shown to the public). A judge who is not on this list cannot score.</p>
+ <p class="muted">These are the names judges choose from the drop-down on the Scoring page. A judge who is not on this list cannot score.</p>
  <div id="judgePanel"></div>
  <label for="judgeList">Judge list (one name per line)</label><textarea id="judgeList" style="min-height:120px"></textarea>
  <div class="notice" style="border-left-color:#c0392b"><b>Do not rename a judge by editing this box.</b> Scores are filed under the name used when they were submitted, so a name changed here leaves them behind. Use the Rename button above, which refuses the change if it would strand anything.</div>
