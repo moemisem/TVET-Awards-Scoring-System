@@ -221,7 +221,7 @@ const parseR=(txt,crit)=>{const m={};String(txt||"").split("\n").forEach(l=>{con
 // IMPORTANT: this must be the Web app URL of the deployment that runs the latest Code.gs
 // (https://script.google.com/macros/s/....../exec)
 const SHEET_URL="https://script.google.com/macros/s/AKfycbwXOBrM1AaMIh7Jkc_ifGTlf1Kwl2RqBh7_MsTRPWSAGYM4IEFqGgeXjQIdn1EUc4Nfzw/exec";
-let PIN=null;
+let PIN=null,AUD=null;   // AUD = read-only auditor credentials, kept in memory only
 // Reads the script's reply. If Google sent a web page instead of data (an error, a sign-in page,
 // a deployment problem), show what it said rather than a JSON parsing error.
 async function readJson(r){
@@ -254,13 +254,13 @@ const run=f=>async(...a)=>{try{return await f(...a)}catch(e){if(e.message!=="can
 let refreshSeq=0;   // only the newest read may update the page, so a slow page-load read cannot wipe a sign-in
 async function refresh(){
  const mySeq=++refreshSeq;
- const j=sel.value.trim(),c=(($('judgeCode')||{}).value||"").trim();
+ const j=AUD?AUD.name:sel.value.trim(),c=AUD?AUD.code:(($('judgeCode')||{}).value||"").trim();
  busy("Checking the shared record...");
  try{
   const r=await fetch(SHEET_URL,{method:"POST",body:JSON.stringify({action:"read",pin:PIN||undefined,judge:(j&&c)?j:undefined,code:(j&&c)?c:undefined})});
   const d=await readJson(r);if(mySeq!==refreshSeq)return;   // a newer read has started: ignore this older answer
   if(d.error){if(/PIN/.test(d.error))PIN=null;throw new Error(d.error)}
-  data.me=undefined;Object.assign(data,d);updateAll()
+  data.me=undefined;data.role=undefined;Object.assign(data,d);updateAll()
  } finally { if(mySeq===refreshSeq)busy(false) }}
 window.unlock=run(async()=>{PIN=prompt("Admin PIN:");if(!PIN)return;try{await refresh()}catch(e){PIN=null;throw e}});
 
@@ -270,7 +270,7 @@ window.unlock=run(async()=>{PIN=prompt("Admin PIN:");if(!PIN)return;try{await re
 // name + code (or the admin PIN).
 const sel=$('judgeName');
 sel.onchange=()=>{
- data.me=undefined;if(!PIN){data.nominees=[];data.scores=[]}
+ AUD=null;data.role=undefined;data.me=undefined;if(!PIN){data.nominees=[];data.scores=[]}
  $('judgeCode').value="";$('scoreForm').innerHTML="";$('scoreNominee').value="";
  loginMsg("Now type your personal code and press Sign in.");updateAll();
 };
@@ -278,6 +278,7 @@ sel.insertAdjacentHTML('afterend','<label>Your personal code</label><input id="j
  '<div class="actions" style="margin-top:10px"><button class="btn green" id="judgeSignIn">Sign in</button></div><div id="loginMsg" class="muted" style="margin-top:8px">Choose your name from the list, type your code, then press Sign in to load the nominees.</div>');
 function loginMsg(t,bad){const e=$('loginMsg');e.textContent=t;e.style.color=bad?"#c0392b":""}
 window.judgeSignIn=async()=>{
+ AUD=null;
  const j=sel.value.trim(),c=$('judgeCode').value.trim();
  if(!j||!c)return loginMsg("Choose your name and enter your personal code.",true);
  try{await refresh();if(!data.me)throw new Error("Name or code not recognised.");
@@ -586,10 +587,19 @@ window.submitScore=run(async id=>{
  await refresh();alert("Score saved to the shared record.");loadScoreForm();renderMyScores();
 });
 
-// ---------- results (administrator only) ----------
+// ---------- results (administrator and auditors) ----------
+const auditorBox=()=>'<div style="max-width:340px;margin:18px auto 0;text-align:left"><b>Auditor sign-in</b><div class="muted" style="margin:2px 0 6px">Legal Services and Internal Audit reviewers (read-only).</div><input id="audName" placeholder="Your name" autocomplete="off"><input id="audCode" type="password" placeholder="Your code" autocomplete="new-password" style="margin-top:8px"><div class="actions"><button class="btn green" onclick="auditorSignIn()">Sign in as auditor</button></div></div>';
+window.auditorSignIn=run(async()=>{
+ const n=($('audName')||{}).value||"",c=($('audCode')||{}).value||"";
+ if(!n.trim()||!c.trim())throw new Error("Enter your name and code.");
+ AUD={name:n.trim(),code:c.trim()};
+ try{await refresh();if(data.role!=="auditor")throw new Error("Name or code not recognised.")}
+ catch(e){AUD=null;data.me=undefined;data.role=undefined;throw e}
+ updateAll();
+});
 window.renderResults=function(){
  const el=$('resultsTable');
- if(!PIN){el.innerHTML='<div class="empty">Results are visible to the administrator only.<br><br><button class="btn gold" onclick="unlock()">Unlock results (admin)</button></div>';return}
+ if(!PIN&&data.role!=="auditor"){el.innerHTML='<div class="empty">Results are visible to the administrator and to appointed auditors only.<br><br><button class="btn gold" onclick="unlock()">Unlock results (admin)</button>'+auditorBox()+'</div>';return}
  if(!data.scores.length){el.innerHTML='<div class="empty">No completed scores yet.</div>';return}
  const req=data.settings.judges;let rows=[];
  data.nominees.forEach(n=>{const ss=data.scores.filter(s=>s.nomineeId===n.id);if(!ss.length)return;
@@ -773,7 +783,7 @@ dst.textContent=".dcards{display:grid;grid-template-columns:repeat(auto-fit,minm
 document.head.appendChild(dst);
 let detailCache={};
 async function fetchDetails(id){
- const code=(($('judgeCode')||{}).value||"").trim(),key=(PIN?"A|":"J|"+(data.me||"")+"|"+code+"|")+id;
+ const code=(AUD?AUD.code:(($('judgeCode')||{}).value||"")).trim(),key=(PIN?"A|":"J|"+(data.me||"")+"|"+code+"|")+id;
  if(detailCache[key])return detailCache[key];
  const body={action:"details",id:String(id)};
  if(PIN)body.pin=PIN;else{body.judge=data.me;body.code=code}
@@ -811,7 +821,7 @@ window.loadScoreForm=function(){loadFormOnly();showNomDetails($('scoreNominee').
 // Admin: a Details button on every nominee row, and optional detail fields on the add/edit form.
 $('nomineeList').insertAdjacentHTML("afterend",'<div id="nomineeDetail"></div>');
 window.viewNominee=run(async id=>{
- if(!PIN)await needAdmin();
+ if(!PIN&&data.role!=="auditor")await needAdmin();
  const n=data.nominees.find(x=>String(x.id)===String(id)),box=$('nomineeDetail');
  box.innerHTML='<div class="dbox"><p class="muted">Loading...</p></div>';
  const f=await fetchDetails(id);
@@ -861,6 +871,37 @@ window.updateAll=function(){
  $('maxScore').value=data.settings.max;$('judgeCount').value=data.settings.judges;
  $('qualify').value=data.settings.qualify??70;$('spread').value=data.settings.spread??15;$('judgeList').value=(data.judges||[]).join("\n");
  renderJudgePanel();renderMyScores();renderHelp();
+};
+
+// ---------- audit trail (administrator and auditors) ----------
+function auditHTML(){
+ const nm=id=>{const n=(data.nominees||[]).find(x=>String(x.id)===String(id));return n?n.name:id};
+ const byDate=(a,b)=>String(b.date).localeCompare(String(a.date));
+ const sc=[...(data.scores||[])].sort(byDate),lg=[...(data.log||[])].sort(byDate),rc=[...(data.recusals||[])].sort(byDate);
+ const tbl=(h,r)=>r.length?'<div class="tablewrap" style="max-height:420px"><table><tr>'+h.map(x=>'<th>'+x+'</th>').join('')+'</tr>'+r.join('')+'</table></div>':'<p class="muted">None recorded.</p>';
+ return '<details class="dbox" style="margin-top:22px" open><summary><b>Audit trail</b> - every score sheet, change and recusal, with server timestamps</summary>'+
+  '<h4>Score sheets ('+sc.length+')</h4>'+tbl(['Date','Nominee','Judge','Scores','Total','Reasons'],sc.map(s=>'<tr><td>'+escHTML(s.date)+'</td><td>'+escHTML(nm(s.nomineeId))+'</td><td>'+escHTML(s.judge)+'</td><td>'+escHTML((s.values||[]).join(' / '))+'</td><td>'+(+s.total).toFixed(2)+'%</td><td style="min-width:240px">'+escHTML(s.comments||'')+'</td></tr>'))+
+  '<h4>Changes to submitted scores ('+lg.length+')</h4>'+tbl(['Date','Nominee','Judge','Old %','New %','Reason'],lg.map(l=>'<tr><td>'+escHTML(l.date)+'</td><td>'+escHTML(nm(l.nomineeId))+'</td><td>'+escHTML(l.judge)+'</td><td>'+escHTML(l.oldTotal)+'</td><td>'+escHTML(l.newTotal)+'</td><td>'+escHTML(l.reason)+'</td></tr>'))+
+  '<h4>Conflicts of interest declared ('+rc.length+')</h4>'+tbl(['Date','Nominee','Judge'],rc.map(r=>'<tr><td>'+escHTML(r.date)+'</td><td>'+escHTML(nm(r.nomineeId))+'</td><td>'+escHTML(r.judge)+'</td></tr>'))+
+  '</details>';
+}
+const resultsBase=window.renderResults;
+window.renderResults=function(){
+ resultsBase();
+ if(PIN||data.role==="auditor")$('resultsTable').insertAdjacentHTML('beforeend',auditHTML());
+};
+// Auditors are read-only: hide every control that writes, and the scoring form.
+const loadFormJudge=window.loadScoreForm;
+window.loadScoreForm=function(){
+ if(data.role==="auditor"){$('scoreForm').innerHTML='<div class="notice">Auditor access is read-only. Scores are captured by the judges.</div>';return}
+ loadFormJudge();
+};
+const updateAuditorBase=window.updateAll;
+window.updateAll=function(){
+ updateAuditorBase();
+ const aud=data.role==="auditor";
+ document.querySelectorAll('#results .actions .red,#nomineeList [data-edit],#nomineeList [data-del]').forEach(b=>b.style.display=aud?'none':'');
+ if(aud&&$('scoreNominee').value)loadScoreForm();
 };
 data.judges=[];data.log=[];data.recusals=[];data.scores=[];data.nominees=[];   // start empty; the sheet is the only source
 init();
